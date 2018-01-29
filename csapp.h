@@ -1,4 +1,5 @@
-fndef __CSAPP_H__
+/* $begin csapp.h */
+#ifndef __CSAPP_H__
 #define __CSAPP_H__
 
 #include <stdio.h>
