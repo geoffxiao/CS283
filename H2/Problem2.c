@@ -8,7 +8,7 @@ int main (int argc, char **argv)
 	
 	// atoi(argv[1]) converts the command line string argument to an integer
 	// FStat accepts a file descriptor argument
-	FStat(atoi(argv[1]), &stat); 
+	Fstat(atoi(argv[1]), &stat); 
 	
 	if (S_ISREG(stat.st_mode)) /* Determine file type */
 		type = "regular";
