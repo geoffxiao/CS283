@@ -7,7 +7,7 @@
 	or write your own to parse command-line options.) 
 */
 
-include "csapp.h"
+#include "csapp.h"
 
 int main(int argc, char **argv)
 {
@@ -19,25 +19,28 @@ int main(int argc, char **argv)
 	
 	int fd;
 	int append_flag = 0;
-	
+	int index;
+
 	// Parse command-line arguments using getopt
 	int c;
 	while ((c = getopt (argc, argv, "a:")) != -1)
-    switch (c)
 	{
-		// -a option
-		case 'a':
-			append_flag = 1;
-			output_file = optarg;
-			break;
+		switch (c)
+		{
+			// -a option
+			case 'a':
+				append_flag = 1;
+				output_file = optarg;
+				break;
 		
-		case '?':
-			fprintf (stderr, "Unknown option character `\\x%x'.\n", optopt);
-			exit(1);
+			case '?':
+				fprintf (stderr, "Unknown option character `\\x%x'.\n", optopt);
+				exit(1);
 
-		default:
-			exit(1);
-    }
+			default:
+				exit(1);
+   	 }
+	}
 
 	// Parse non option arguments
 	for (index = optind; index < argc; index++)
@@ -52,21 +55,14 @@ int main(int argc, char **argv)
 	// O_TRUNC = If file already exists, empty the file
 	// O_CREAT = If file doesn't exist, create empty version of file
 	// O_APPEND = append to file
-	if(append_flag == 0)
+	if(append_flag == 1) // Append
 	{
-		fd = Open(output_file, O_RDWR | O_APPEND | O_CREAT)
+		fd = Open(output_file, O_RDWR | O_APPEND | O_CREAT, 0);
 	}		
 	else // Don't append
 	{
-		fd = Open(output_file, O_RDWR | O_TRUNC | O_CREAT)
+		fd = Open(output_file, O_RDWR | O_TRUNC | O_CREAT, 0);
 	}		
-	
-	
-	// Error check - Try to open the file
-	if(fd) < 0)
-	{	
-		printf("Invalid/Missing Commandline Argument");
-	}
 	
 	// Write to stdout and file
 	Rio_readinitb(&rio, STDIN_FILENO);
