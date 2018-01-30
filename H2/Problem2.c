@@ -1,3 +1,9 @@
+/*
+	Write a version of the statcheck program in Figure 10.10, called 
+	fstatcheck, that takes a descriptor number on the command line 
+	rather than a filename.
+*/
+
 #include "csapp.h"
 
 int main (int argc, char **argv)
