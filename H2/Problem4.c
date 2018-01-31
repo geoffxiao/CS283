@@ -7,19 +7,21 @@
 	or write your own to parse command-line options.) 
 */
 
-#include "csapp.h"
+#include <fcntl.h> // For Unix system calls
+#include <unistd.h> // For Unix system calls
+#include <stdio.h>
+#include <stdlib.h>
+
+#define	MAXLINE	 8192  /* max text line length */
 
 int main(int argc, char **argv)
 {
 	
-	int n;
-	rio_t rio; // Robust I/O
 	char buf[MAXLINE]; // where to store read output, and where to write from
 	char* output_file = argv[1]; // output to file named in command-line arguments
 	
-	int fd;
-	int append_flag = 0;
-	int index;
+	int fd; // Output file descriptor
+	int append_flag = 0; // Append to output file?
 
 	// Parse command-line arguments using getopt
 	int c;
@@ -30,51 +32,53 @@ int main(int argc, char **argv)
 			// -a option
 			case 'a':
 				append_flag = 1;
-				output_file = optarg;
+				output_file = optarg; // argument associated with -a option
 				break;
 		
+			// Error checking, invalid arg
 			case '?':
-				fprintf (stderr, "Unknown option character `\\x%x'.\n", optopt);
-				exit(1);
-
-			default:
 				exit(1);
    	 }
 	}
 
-	// Parse non option arguments
-	for (index = optind; index < argc; index++)
+	// Do we have a file argument?
+	if(optind >= argc && append_flag == 0)
 	{
-		if(append_flag == 0)
-		{
-			output_file = argv[index];
-		}
-	}		
+		fprintf(stderr, "No file argument passed\n");
+		exit(1);
+	}
+	else if(append_flag == 0) 
+	// get the file arg, file arg not associated with option flag
+	{
+		output_file = argv[optind];
+	}
 	
-	// O_RDRW = Read + write
-	// O_TRUNC = If file already exists, empty the file
-	// O_CREAT = If file doesn't exist, create empty version of file
-	// O_APPEND = append to file
+
+	// Option flags for open
+	// 	O_RDRW = Read + write
+	//		O_TRUNC = If file already exists, empty the file
+	// 	O_CREAT = If file doesn't exist, create empty version of file
+	// 	O_APPEND = append to file
+	// 	S_IRUSR = give user read permissions for created file
+	// 	S_IWUSR = give user write permissions for created file
 	if(append_flag == 1) // Append
-	{
-		fd = Open(output_file, O_RDWR | O_APPEND | O_CREAT, 0);
-	}		
+		fd = open(output_file, O_RDWR | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
 	else // Don't append
-	{
-		fd = Open(output_file, O_RDWR | O_TRUNC | O_CREAT, 0);
-	}		
+		fd = open(output_file, O_RDWR | O_TRUNC | O_CREAT, S_IRUSR | S_IWUSR);
 	
+	if(fd < 0)
+		fprintf(stderr, "Error opening file %s for writing", output_file);
+
+	int n; // # bytes read = # bytes to write
 	// Write to stdout and file
-	Rio_readinitb(&rio, STDIN_FILENO);
-	while((n = Rio_readlineb(&rio, buf, MAXLINE)) != 0)
+	while((n = read(STDIN_FILENO, buf, MAXLINE)) != 0)
 	{
-		Rio_writen(STDOUT_FILENO, buf, n); // write to stdout
-		Rio_writen(fd, buf, n); // write to file
+		write(STDOUT_FILENO, buf, n); // write to stdout
+		write(fd, buf, n); // write to file
 	}
 		
-	// Close file if it was opened
-	if(fd != -1)
-		Close(fd);
+	// Close file
+	close(fd);
 
 	exit(0);
 }
