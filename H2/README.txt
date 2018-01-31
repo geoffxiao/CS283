@@ -4,13 +4,37 @@ H2
 --------------------------------------------------------------------------------------------------
 All code compiled using tux (gcc 5.4.0 Ubuntu 5.4.0-6ubuntu~16.04.4)
 --------------------------------------------------------------------------------------------------
-Requirements to run/Instructions:
+Descriptions/Requirements to run/Instructions:
 
-Problem 1. Nothing to note.
+Problem 1. 
+Ran program to test output.
 
-Problem 2. Nothing to note.
+Assumptions: Nothing to note.
 
-Problem 3. Nothing to note.
+
+Problem 2.
+Takes commandline argument, a file descriptor number. Outputs the type and
+read access of the file. 
+
+Assumptions: None
+Instructions:
+Run program as...
+	program arg
+		program: executable program
+		arg = a file descriptor number
+
+
+Problem 3.
+Copies stdin to stdout. If commandline argument specified, copy from the
+commandline agument file to stdout.
+
+Assumptions: None
+Instructions:
+Run program as...
+	program arg
+		program: executable program
+		arg(optional) = file to copy to stdout, if not set, copies from stdin
+
 
 Problem 4. 
 Assumptions: Max bytes in one line of input from stdin is 8192.
@@ -23,16 +47,15 @@ Run the program as...
 --------------------------------------------------------------------------------------------------
 Testing:
 
-Problem 1. 
+Problem 1. Ran program to confirm output.
 
+Problem 2. Tested on stdin, stdout, and stderr. stdin, stdout, and stderr
+were file type "other" and read "yes".
 
-Problem 2. 
+Problem 3. Tested with stdin. Also tested with commandline arguments for
+input files.
 
-
-Problem 3.
-
-
-Problem 4.
+Problem 4. Compared program behavior with bash tee command.
 Tested by comparing with results of Unix tee command.
 
 All programs, when tested, ran correctly.

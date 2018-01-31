@@ -11,10 +11,18 @@ int main (int argc, char **argv)
 	
 	struct stat stat;
 	char *type, *readok;
-	
+
+	// Check number of arguments
+	if(argc != 2)
+	{
+		fprintf(stderr,"Invalid number of arguments\n");
+		exit(1);
+	}
+
 	// atoi(argv[1]) converts the command line string argument to an integer
 	// FStat accepts a file descriptor argument
-	Fstat(atoi(argv[1]), &stat); 
+	int fd = atoi(argv[1]);
+	Fstat(fd, &stat); 
 	
 	if (S_ISREG(stat.st_mode)) /* Determine file type */
 		type = "regular";

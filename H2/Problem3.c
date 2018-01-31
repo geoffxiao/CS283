@@ -16,24 +16,28 @@ int main(int argc, char **argv)
 	char buf[MAXLINE];
 
 	// ---- Inserted code below ---- //
-	int fd = -1;
-
-	if(argc > 1) // Optional command line argument
+	if(argc > 2) // Check number of args
 	{
-		fd = Open(argv[1], O_RDONLY, 0); // Open infile
-		dup2(fd, STDIN_FILENO); // Redirect file to stdin
-		printf("%d", fd);
+		fprintf(stderr, "Invalid number of arguments\n");
+		exit(1);
+	}
+
+	if(argc == 2) // Optional command line argument
+	{
+		int fd = Open(argv[1], O_RDONLY, 0); // Open infile
+		if(fd < 0)
+		{
+			fprintf(stderr, "Unable to read %s\n", argv[1]);
+			exit(1);
+		}
+		Dup2(fd, STDIN_FILENO); // Redirect file to stdin using Dup2 from csapp
+		Close(fd);
 	}
 	// ---- Inserted code above ---- //
 
 	Rio_readinitb(&rio, STDIN_FILENO);
 	while((n = Rio_readlineb(&rio, buf, MAXLINE)) != 0)
 		Rio_writen(STDOUT_FILENO, buf, n);
-
-	// ---- Inserted code below ---- //
-	// Close file if it was opened
-	if(fd != -1)
-		Close(fd);
 
 	exit(0);
 }
