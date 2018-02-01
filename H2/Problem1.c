@@ -1,5 +1,11 @@
 #include "csapp.h"
 
+/*
+	What is the output of the following program?
+
+	fd2 = 4
+*/
+
 int main()
 {
 
@@ -18,7 +24,7 @@ int main()
 	fd2 = Open("baz.txt", O_RDONLY, 0); // Open "baz.txt"
 	// fd2 is descriptor 4 because 4 is the smallest descriptor available
 	
-	printf("fd2 = %d\n", fd2); // "fd2 = 3" because fd2 is file descriptor 3
+	printf("fd2 = %d\n", fd2); // "fd2 = 4" because fd2 is file descriptor 4
 	
 	exit(0);
 

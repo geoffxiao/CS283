@@ -37,13 +37,14 @@ Run program as...
 
 
 Problem 4. 
-Assumptions: Max bytes in one line of input from stdin is 8192.
+Assumptions: Max bytes in one line of input from stdin is 8192. Max filename
+argument is 128 bytes. Max number of commandline file arguments is 128.
 Instructions:
 Run the program as...
 	program [options] arg
 		program: exectuable program
 		[options]: -a = append to file, default is to truncate file
-		arg: file to write to
+		arg: file to write to, can pass multiple file args
 --------------------------------------------------------------------------------------------------
 Testing:
 

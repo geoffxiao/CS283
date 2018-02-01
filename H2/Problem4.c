@@ -11,48 +11,36 @@
 #include <unistd.h> // For Unix system calls
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define	MAXLINE	 8192  /* max text line length */
+#define  MAXFILENAME 128 /* max file name */
 
 int main(int argc, char **argv)
 {
 	
 	char buf[MAXLINE]; // where to store read output, and where to write from
-	char* output_file = argv[1]; // output to file named in command-line arguments
-	
-	int fd; // Output file descriptor
-	int append_flag = 0; // Append to output file?
+	char output_file[MAXFILENAME][MAXFILENAME]; // output to file named in command-line arguments
 
-	// Parse command-line arguments using getopt
-	int c;
-	while ((c = getopt (argc, argv, "a:")) != -1)
+	int fd[MAXLINE]; // Output file descriptors
+	int append_flag; // Append to output file?
+
+	int file_counter = 0; // number of file arguments counter
+
+	// parse command-line arguments
+	for(int i = 1; i < argc; i++)
 	{
-		switch (c)
+		// -a file
+		if(strcmp(argv[i],"-a") == 0)
 		{
-			// -a option
-			case 'a':
-				append_flag = 1;
-				output_file = optarg; // argument associated with -a option
-				break;
-		
-			// Error checking, invalid arg
-			case '?':
-				exit(1);
-   	 }
+			append_flag = 1; // append -a option
+		}
+		else
+		{
+			strcpy(output_file[file_counter],argv[i]); // get filename
+			file_counter = file_counter + 1;
+		}
 	}
-
-	// Do we have a file argument?
-	if(optind >= argc && append_flag == 0)
-	{
-		fprintf(stderr, "No file argument passed\n");
-		exit(1);
-	}
-	else if(append_flag == 0) 
-	// get the file arg, file arg not associated with option flag
-	{
-		output_file = argv[optind];
-	}
-	
 
 	// Option flags for open
 	// 	O_RDRW = Read + write
@@ -61,24 +49,45 @@ int main(int argc, char **argv)
 	// 	O_APPEND = append to file
 	// 	S_IRUSR = give user read permissions for created file
 	// 	S_IWUSR = give user write permissions for created file
-	if(append_flag == 1) // Append
-		fd = open(output_file, O_RDWR | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
-	else // Don't append
-		fd = open(output_file, O_RDWR | O_TRUNC | O_CREAT, S_IRUSR | S_IWUSR);
-	
-	if(fd < 0)
-		fprintf(stderr, "Error opening file %s for writing", output_file);
+	if(append_flag == 1) // append
+	{
+		for(int i = 0; i < file_counter; i++)
+		{
+			fd[i] = open(output_file[i], O_RDWR | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
+			if(fd[i] < 0)
+			{
+				fprintf(stderr, "Error opening file %s\n", output_file[i]);
+			}
+		}
+	}
+	else // don't append
+	{	
+		for(int i = 0; i < file_counter; i++)
+		{
+			fd[i] = open(output_file[i], O_RDWR | O_TRUNC | O_CREAT, S_IRUSR | S_IWUSR);
+			if(fd[i] < 0)
+			{
+				fprintf(stderr, "Error opening file %s\n", output_file[i]);
+			}
+		}
+	}
 
 	int n; // # bytes read = # bytes to write
-	// Write to stdout and file
+	// Write to stdout and files
 	while((n = read(STDIN_FILENO, buf, MAXLINE)) != 0)
 	{
 		write(STDOUT_FILENO, buf, n); // write to stdout
-		write(fd, buf, n); // write to file
+		for(int i = 0; i < file_counter; i++)
+		{
+			write(fd[i], buf, n); // write to file
+		}
 	}
 		
-	// Close file
-	close(fd);
+	// Close files
+	for(int i = 0; i < file_counter; i++)
+	{
+		close(fd[i]);
+	}
 
 	exit(0);
 }
