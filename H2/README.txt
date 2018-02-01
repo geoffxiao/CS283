@@ -7,7 +7,7 @@ All code compiled using tux (gcc 5.4.0 Ubuntu 5.4.0-6ubuntu~16.04.4)
 Descriptions/Requirements to run/Instructions:
 
 Problem 1. 
-Run program to test output.
+Run program to test output. Output is "fd = 4"
 
 Assumptions: Nothing to note.
 
