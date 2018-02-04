@@ -56,7 +56,7 @@ int main(int argc, char** argv)
 
 			char line[MAX_LINE_SIZE]; // a line in the file 'original_file'
 			char to_write[MAX_LINE_SIZE]; // processed line to write to `temp_file`
-			char log_str[MAX_LINE]; // changes made to `to_write` from `line`
+			char log_str[MAX_LINE_SIZE]; // changes made to `to_write` from `line`
 			
 			int line_num = 1; // current line in `original_file`
 			
@@ -64,7 +64,7 @@ int main(int argc, char** argv)
 			// replace 'find' parameter with the 'replace' parameter
 			while(fgets(line, MAX_LINE_SIZE, original_file) != NULL)
 			{
-				if(found_found == 0 && strstr(line, find) != NULL)		
+				if(found_find == 0 && strstr(line, find) != NULL)		
 				{
 					found_find = 1; // 1 -> 'find' is in the file
 				}
@@ -87,7 +87,7 @@ int main(int argc, char** argv)
 			// find 'prefix' param, prepend 'find' param to the left of the 'prefix' param
 			if(found_find == 0)
 			{
-				while(fgets(line, MAX_LINE,SIZE, original_file) != NULL)
+				while(fgets(line, MAX_LINE_SIZE, original_file) != NULL)
 				{
 					prefix_prepend_all(line, prefix, find, to_write, log_str);	
 				}
@@ -190,7 +190,7 @@ void prefix_prepend_all(char* original, char* prefix, char* find, char* final, c
     
     // Create log string
     char temp_str[MAX_LINE_SIZE];
-    sprintf(temp_str, "%d prepend(s) made ", num_changes);
+    sprintf(temp_str, "%ld prepend(s) made ", num_changes);
     strcat(temp_str, log_str);
     strcpy(log_str, temp_str);    
 }
@@ -261,7 +261,7 @@ void find_replace_all(char* original, char* find, char* replace, char* final, ch
         // Update log string
         num_changes++;
         char local_temp[MAX_LINE_SIZE];
-        sprintf(local_temp, " %d", curr_loc - strlen(replace) + 1); // +1 because char array starts at 0 index
+        sprintf(local_temp, " %ld", curr_loc - strlen(replace) + 1); // +1 because char array starts at 0 index
         strcat(log_str, local_temp);
     }
     
