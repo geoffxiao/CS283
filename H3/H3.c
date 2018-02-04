@@ -19,7 +19,9 @@ int find_replace(char* original, char* find, char* replace, char* final, int sta
 void prefix_prepend_all(char* original, char* prefix, char* find, char* final, char* log_str);
 int prefix_prepend(char* original, char* prefix, char* find, char* final, int start);
 
-
+// argv: 1 = find
+//	      2 = replace
+//       3 = prefix
 int main(int argc, char** argv)
 {
 
@@ -42,13 +44,13 @@ int main(int argc, char** argv)
 
 	while((file = readdir(directory)) != NULL)
 	{
-		
-		
 		// DT_REG = regular file
 		// Also need to check that file extension is ".txt"
 		int length = strlen(file->d_name);
 		if(file->d_type == DT_REG && strncmp(file->d_name + length - 4, ".txt", 4) == 0)
 		{
+			fprintf(stdout, "-----Processing File: %s-----\n", file->d_name);
+
 			FILE* original_file = fopen(file->d_name, "r");
 			FILE* temp_file = fopen(temp_file_name, "w"); // temporary file
 
@@ -56,8 +58,10 @@ int main(int argc, char** argv)
 
 			char line[MAX_LINE_SIZE]; // a line in the file 'original_file'
 			char to_write[MAX_LINE_SIZE]; // processed line to write to `temp_file`
-			char log_str[MAX_LINE_SIZE]; // changes made to `to_write` from `line`
 			
+			char log_str[MAX_LINE_SIZE]; // changes made to `to_write` from `line`
+			log_str[0] = '\0';
+
 			int line_num = 1; // current line in `original_file`
 			
 			// Read entire file 'original_file'
@@ -71,45 +75,48 @@ int main(int argc, char** argv)
 				
 				find_replace_all(line, find, replace, to_write, log_str); // replace 'find' with 'replace' in 'line'
 				fprintf(temp_file, "%s", to_write);	// write to 'temp_file'
-			
+
+				// print `log_str` to stdout
+				fprintf(stdout, "Line %d: %s\n", line_num, log_str);
 				line_num++;
 			}
 
-			// print `log_str` to stdout
-			fprintf(stdout, "Line %d: %s\n", line_num, log_str);
-			
 			// close and reopen the files
 			fclose(original_file); fclose(temp_file);
-			original_file = fopen(file->d_name, "r"); 
-			temp_file = fopen(temp_file_name, "w");
+			// rename 'temp_file' to be the 'original_file' name
+			remove(file->d_name);
+			rename(temp_file_name, file->d_name);			
+
 
 			// 'find' wasn't found in 'original_file'
 			// find 'prefix' param, prepend 'find' param to the left of the 'prefix' param
 			if(found_find == 0)
 			{
+				line_num = 1;	
+
+				// open the files
+				temp_file = fopen(temp_file_name, "w"); // temporary file
+				original_file = fopen(file->d_name, "r");			
+
 				while(fgets(line, MAX_LINE_SIZE, original_file) != NULL)
 				{
-					prefix_prepend_all(line, prefix, find, to_write, log_str);	
+					prefix_prepend_all(line, prefix, find, to_write, log_str);
+					fprintf(temp_file, "%s", to_write); // write to 'temp_file'
+
+					// print 'log_str' to stdout
+					fprintf(stdout, "Line %d: %s\n", line_num, log_str);
+					line_num++;
 				}
-				
-				line_num++;
+			
+				fclose(original_file); fclose(temp_file);
+				// rename 'temp_file' to be the 'original_file' name
+				remove(file->d_name);
+				rename(temp_file_name, file->d_name);
 			}
-			
-			// print `log_str` to stdout
-			fprintf(stdout, "Line %d: %s\n", line_num, log_str);
-
-			
-			fclose(original_file); fclose(temp_file);
-			// rename 'temp_file' to be the 'original_file' name
-			remove(file->d_name);
-			rename(temp_file_name, file->d_name);
-
 		}
 	}
 
-
 	exit(0);
-
 }
 
 
