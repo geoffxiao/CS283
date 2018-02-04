@@ -184,13 +184,13 @@ void prefix_prepend_all(char* original, char* prefix, char* find, char* final, c
         // Update log string
         num_changes++;
         char local_temp[MAX_LINE_SIZE];
-        sprintf(local_temp, " %d", curr_loc - strlen(prefix) - strlen(find) + 1); // +1 because char array starts at 0 index
+        sprintf(local_temp, " %ld", curr_loc - strlen(prefix) - strlen(find) + 1); // +1 because char array starts at 0 index
         strcat(log_str, local_temp);
     }
     
     // Create log string
     char temp_str[MAX_LINE_SIZE];
-    sprintf(temp_str, "%ld prepend(s) made ", num_changes);
+    sprintf(temp_str, "%d prepend(s) made ", num_changes);
     strcat(temp_str, log_str);
     strcpy(log_str, temp_str);    
 }
