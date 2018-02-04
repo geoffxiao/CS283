@@ -6,8 +6,19 @@
 #define MAX_LINE_SIZE 2048
 #define temp_file_name "./H3-temp-file"
 
-void find_replace_all(char* original, char* find, char* replace, char* final);
-void find_replace(char* original, char* find, char* replace, char* final);
+// find_replace_all: Replace all occurrences of `find` in `original` with `replace`. Store
+//                   the result in `final`. Use `log_str` to keep track of the number of 
+//                   changes and the location of changes in `final`.
+void find_replace_all(char* original, char* find, char* replace, char* final, char* log_str);
+int find_replace(char* original, char* find, char* replace, char* final, int start);
+
+
+// prefix_prepend_all: For all instances of `prefix` in `original`, prepend `find` to the left of
+//                     `find`. Store the result in `final`. Use `log_str` to keep track of the 
+//                     number of changes and the location of changes in `final`.
+void prefix_prepend_all(char* original, char* prefix, char* find, char* final, char* log_str);
+int prefix_prepend(char* original, char* prefix, char* find, char* final, int start);
+
 
 int main(int argc, char** argv)
 {
@@ -44,21 +55,29 @@ int main(int argc, char** argv)
 			int found_find = 0; // 0 -> no 'find' in 'original_file'
 
 			char line[MAX_LINE_SIZE]; // a line in the file 'original_file'
-			char to_write[MAX_LINE_SIZE];
+			char to_write[MAX_LINE_SIZE]; // processed line to write to `temp_file`
+			char log_str[MAX_LINE]; // changes made to `to_write` from `line`
+			
+			int line_num = 1; // current line in `original_file`
 			
 			// Read entire file 'original_file'
 			// replace 'find' parameter with the 'replace' parameter
 			while(fgets(line, MAX_LINE_SIZE, original_file) != NULL)
 			{
-				if(strstr(line, find) != NULL)		
+				if(found_found == 0 && strstr(line, find) != NULL)		
 				{
 					found_find = 1; // 1 -> 'find' is in the file
 				}
 				
-				find_replace_all(line, find, replace, to_write); // replace 'find' with 'replace' in 'line'
+				find_replace_all(line, find, replace, to_write, log_str); // replace 'find' with 'replace' in 'line'
 				fprintf(temp_file, "%s", to_write);	// write to 'temp_file'
+			
+				line_num++;
 			}
 
+			// print `log_str` to stdout
+			fprintf(stdout, "Line %d: %s\n", line_num, log_str);
+			
 			// close and reopen the files
 			fclose(original_file); fclose(temp_file);
 			original_file = fopen(file->d_name, "r"); 
@@ -70,13 +89,17 @@ int main(int argc, char** argv)
 			{
 				while(fgets(line, MAX_LINE,SIZE, original_file) != NULL)
 				{
-					prefix_prepend(line, prefix, find, to_write);	
+					prefix_prepend_all(line, prefix, find, to_write, log_str);	
 				}
-			
+				
+				line_num++;
 			}
+			
+			// print `log_str` to stdout
+			fprintf(stdout, "Line %d: %s\n", line_num, log_str);
 
+			
 			fclose(original_file); fclose(temp_file);
-
 			// rename 'temp_file' to be the 'original_file' name
 			remove(file->d_name);
 			rename(temp_file_name, file->d_name);
@@ -90,52 +113,161 @@ int main(int argc, char** argv)
 }
 
 
-// Inputs: original = original string, "stuffA...find...stuffB"
-//			  find = string to find, "find"
-//         replace = string to replace find with, "replace"
-//         final = first occurrence of find string is replaced with replace string, "stuffA...replace...stuffB"
-// Replace first occurrence of find is replaced with replace
-void find_replace(char* original, char* find, char* replace, char* final)
+// -----------------------------------------------------------------------------------------------------------
+// Helper Functions
+// -----------------------------------------------------------------------------------------------------------
+
+
+// Inputs: original = original string of the form, "stuffA...prefix...stuffB...prefix...stuffC..."
+//         prefix = `prefix` string
+//         find = `find` string, will prepend `find` to the left of all instances of `prefix`
+//         start = integer to keep track of current location in original string
+//         final = where to store the output string
+//               = "stuffA...findprefix...stuffB...prefix...stuffC"
+//
+// Starting at the `start` char of `original`, find the first instance of `prefix` and prepend `find` to the 
+// left of `prefix`
+int prefix_prepend(char* original, char* prefix, char* find, char* final, int start)
 {
-	char up_to_find[MAX_LINE_SIZE];
+    // `original` = "stuffA...prefix...stuffB...prefix...stuffC"
 
-	// original = "stuffA...find...stuffB"
+    char up_to_prefix[MAX_LINE_SIZE];
+    
+    char* start_str = &original[start]; // start from `start` byte
+    char* prefix_to_end = strstr(start_str, prefix);  // `prefix_to_end` = pointer to "prefix...stuffB...prefix...stuffC" in `original`
+    
+    // if `start` is past first case of `prefix`
+    //    `prefix_to_end` = "prefix...stuffC"
 
-	// find_to_end = pointer to find...stuffB in original
-	char* find_to_end = strstr(original, find); 
+    // `up_to_prefix` = copy of "stuffA..." 
+    // strlen(original) = strlen(prefix_to_end) + strlen(up_to_prefix)
+    strcpy(up_to_prefix, original);
+    up_to_prefix[strlen(original) - strlen(prefix_to_end)] = '\0'; 
+    
+    // copy "stuffA...findprefix...stuffB...prefix...stuffC" into `final`
+    strcpy(final, up_to_prefix); // `final` = "stuffA..."
+    strcat(final, find); // `final` = "stuffA...find"
+    strcat(final, prefix_to_end); // `final` = "stuffA...findprefix...stuffB...prefix...stuffC"
 
-
-	// up_to_find = copy of stuffA...
-	strcpy(up_to_find, original);
-	up_to_find[strlen(original) - strlen(find_to_end)] = '\0'; // strlen(original) = strlen(find_to_end) + strlen(up_to_find)
-
-	// past_find_to_end = pointer to ...stuffB
-	char* past_find_to_end = original + strlen(up_to_find) + strlen(find);
-
-	// copy stuffA...replace...stuffB into final
-	strcpy(final, up_to_find); // final = stuffA...
-	strcat(final, replace); // final = stuffA...replace
-	strcat(final, past_find_to_end); // final = stuffA...replace...stuffB
-
+    return strlen(up_to_prefix) + strlen(find) + strlen(prefix); // return location of first char after "findprefix"
 }
 
-// Inputs: original = original string, "stuffA...find...stuffB...find...stuffC..."
-//         find = string to find, "find"
-//         replace = string with which to replace find, "replae"
-//         final = replaced all occurrences of find with replace, "stuffA...replace...stuffB...replace...stuffC"
+
+// Inputs: original = original string of the form, "stuffA...prefix...stuffB...prefix...stuffC..."
+//         prefix = `prefix` string
+//         find = `find` string, will prepend `find` to the left of all instances of `prefix`
+//         final = where to store the output string
+//               = "stuffA...findprefix...stuffB...findprefix...stuffC"
+//         log_str = keeps track of number of changes made and where the changes are in `original`
 //
-// Replace all occurrences of find in the original string with the replace string
-void find_replace_all(char* original, char* find, char* replace, char* final)
+// Find all instances of `prefix` in `original` and prepend `find` to the left of `prefix`
+void prefix_prepend_all(char* original, char* prefix, char* find, char* final, char* log_str)
 {
-	char* exists; 
-	char original_temp[MAX_LINE_SIZE]; // local copy of original 
-	strcpy(original_temp, original);
-	strcpy(final, original); // if find doesn't exist in original, final = original   
- 
-	// Keep running find_replace until find is no longer in the original_temp string
-	while( (exists = strstr(original_temp,find)) != NULL)
-	{
-		find_replace(original_temp, find, replace, final);
-		strcpy(original_temp, final); 
-	}
+    char original_temp[300]; // local copy of `original`
+    strcpy(original_temp, original);
+    
+    strcpy(final, original); // `final` = the processed string
+    
+    int curr_loc = 0; // current location in `original_temp`
+    char* start_str = &original_temp[curr_loc]; // only look to the left of `curr_loc` byte in `original_temp`
+    
+    int num_changes = 0; // number of changes made
+    strcpy(log_str, "at character(s):"); // initialize
+    
+    // Keep running `prefix_prepend` until `prefix` is no longer in the `start_str` string
+    while( strstr(start_str, prefix) != NULL )
+    {
+        curr_loc = prefix_prepend(original_temp, prefix, find, final, curr_loc); // update current location in `original_temp`
+        strcpy(original_temp, final); // update `original_temp`
+        start_str = &original_temp[curr_loc]; // update `start_str`
+
+        // Update log string
+        num_changes++;
+        char local_temp[MAX_LINE_SIZE];
+        sprintf(local_temp, " %d", curr_loc - strlen(prefix) - strlen(find) + 1); // +1 because char array starts at 0 index
+        strcat(log_str, local_temp);
+    }
+    
+    // Create log string
+    char temp_str[MAX_LINE_SIZE];
+    sprintf(temp_str, "%d prepend(s) made ", num_changes);
+    strcat(temp_str, log_str);
+    strcpy(log_str, temp_str);    
+}
+
+
+// Inputs: original = original string, "stuffA...find...stuffB...find...stuffC"
+//		   find = string to find, "find"
+//         replace = string to replace find with, "replace"
+//         start = integer to keep track of current location in original string
+//         final = where to store processed string
+//               = first occurrence of find string is replaced with replace string, "stuffA...replace...stuffB...find...stuffC"
+//
+// Replace first occurrence of `find` with `replace` in `original`
+int find_replace(char* original, char* find, char* replace, char* final, int start)
+{
+    // `original` = "stuffA...find...stuffB...find...stuffC"
+
+    char up_to_find[MAX_LINE_SIZE];
+   
+    char* start_str = &original[start]; // start from `start` byte
+    char* find_to_end = strstr(start_str, find); // `find_to_end` = pointer to "find...stuffB...find...stuffC" in `original`
+
+    // `up_to_find` = copy of "stuffA..."
+    // strlen(original) = strlen(find_to_end) + strlen(up_to_find)
+    strcpy(up_to_find, original);
+    up_to_find[strlen(original) - strlen(find_to_end)] = '\0';
+    
+    // `past_find_to_end` = pointer to "...stuffB...find...stuffC"
+    char* past_find_to_end = original + strlen(up_to_find) + strlen(find);
+
+    // copy "stuffA...replace...stuffB...find...stuffC" into final
+    strcpy(final, up_to_find); // `final` = "stuffA..."
+    strcat(final, replace); // `final` = "stuffA...replace"
+    strcat(final, past_find_to_end); // `final` = "stuffA...replace...stuffB...find...stuffC"
+
+    return strlen(up_to_find) + strlen(replace); // return location of first char after 'replace'
+}
+
+
+// Inputs: original = original string, "stuffA...find...stuffB...find...stuffC"
+//		   find = string to find, "find"
+//         replace = string to replace find with, "replace"
+//         final = where to store processed string
+//               = all occurrences of find string is replaced with replace string, "stuffA...replace...stuffB...replace...stuffC"
+//         log_str = keeps track of the number of changes and where the changes were made in `final`
+//
+// Replace all occurrences of `find` with `replace`
+void find_replace_all(char* original, char* find, char* replace, char* final, char* log_str)
+{
+    char original_temp[MAX_LINE_SIZE]; // local copy of `original`
+    strcpy(original_temp, original);
+    
+    strcpy(final, original); // `final` = store processed string
+    
+    int curr_loc = 0; // current location in `original_temp`
+    char* start_str = &original_temp[curr_loc]; // look to the left of `curr_loc` in `original_temp` for `find`
+    
+    int num_changes = 0; // number of changes made
+    strcpy(log_str, "at character(s):"); // initialize
+    
+    // Keep running `find_replace` until find is no longer in the `start_str` string
+    while( strstr(start_str, find) != NULL)
+    {
+        curr_loc = find_replace(original_temp, find, replace, final, curr_loc); // update `curr_loc`
+        strcpy(original_temp, final); // update `original_temp`
+        start_str = &original_temp[curr_loc]; // update `start_str`
+
+        // Update log string
+        num_changes++;
+        char local_temp[MAX_LINE_SIZE];
+        sprintf(local_temp, " %d", curr_loc - strlen(replace) + 1); // +1 because char array starts at 0 index
+        strcat(log_str, local_temp);
+    }
+    
+    // Create log string
+    char temp_str[MAX_LINE_SIZE];
+    sprintf(temp_str, "%d replacements(s) made ", num_changes);
+    strcat(temp_str, log_str);
+    strcpy(log_str, temp_str);
 }
