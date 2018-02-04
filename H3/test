@@ -1,0 +1,37 @@
+#!/bin/bash
+find=$1
+replace=$2
+prefix=$3
+
+rm -rf testing/
+mkdir testing/
+
+declare -a found
+declare -a files
+file_num=0
+
+
+# Replace
+for filename in ./*.txt; do
+	sed 's/'"$find"'/'"$replace"'/g' "$filename" > "testing/$filename"
+
+	files[file_num]=$filename
+
+	DIFF=$(diff "$filename" "testing/$filename") 
+	if [ "$DIFF" != "" ]; then
+  		found[file_num]=1 # found
+	else
+		found[file_num]=0 # not found
+	fi
+
+	file_num=$((file_num + 1))
+done
+
+file_num=$((file_num - 1))
+
+# Prepend
+for file in `seq 0 "$file_num"`; do
+	if [ "${found[$file]}" = 0 ]; then
+		sed 's/'"$prefix"'/'"$find""$prefix"'/g' "${files[$file]}"  > "testing/${files[$file]}"
+	fi
+done
