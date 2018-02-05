@@ -179,7 +179,7 @@ void prefix_prepend_all(char* original, char* prefix, char* find, char* final, c
     char* start_str = &original_temp[curr_loc]; // only look to the left of `curr_loc` byte in `original_temp`
     
     int num_changes = 0; // number of changes made
-    strcpy(log_str, "at character(s):"); // initialize
+    strcpy(log_str, "at character(s) "); // initialize
     
     // Keep running `prefix_prepend` until `prefix` is no longer in the `start_str` string
     while( strstr(start_str, prefix) != NULL )
@@ -200,6 +200,9 @@ void prefix_prepend_all(char* original, char* prefix, char* find, char* final, c
     sprintf(temp_str, "%d prepend(s) made ", num_changes);
     strcat(temp_str, log_str);
     strcpy(log_str, temp_str);    
+
+	 if(num_changes == 0)
+		 strcpy(log_str, "0 prepends made");
 }
 
 
@@ -256,7 +259,7 @@ void find_replace_all(char* original, char* find, char* replace, char* final, ch
     char* start_str = &original_temp[curr_loc]; // look to the left of `curr_loc` in `original_temp` for `find`
     
     int num_changes = 0; // number of changes made
-    strcpy(log_str, "at character(s):"); // initialize
+    strcpy(log_str, "at character(s) "); // initialize
     
     // Keep running `find_replace` until find is no longer in the `start_str` string
     while( strstr(start_str, find) != NULL)
@@ -277,4 +280,7 @@ void find_replace_all(char* original, char* find, char* replace, char* final, ch
     sprintf(temp_str, "%d replacements(s) made ", num_changes);
     strcat(temp_str, log_str);
     strcpy(log_str, temp_str);
+
+	 if(num_changes == 0)
+		 strcpy(log_str, "0 replacements made");
 }

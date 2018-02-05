@@ -3,14 +3,18 @@ find=$1
 replace=$2
 prefix=$3
 
+# Bash version of H3 Program
+# Store processed files in folder called testing
+
 rm -rf testing/
 mkdir testing/
 
-declare -a found # 1 = found
+declare -a found # 1 = found, 0 = not found
 declare -a filenames # filenames, associated array with found
 file_num=0 # total number of files processed
 
 # Replace
+# Use sed to replace `find` with `replace`
 for filename in ./*.txt; do
 	sed 's/'"$find"'/'"$replace"'/g' "$filename" > "testing/$filename"
 
@@ -28,7 +32,10 @@ done
 
 file_num=$((file_num - 1))
 
+
+
 # Prepend, if not replaced
+# Use sed to replace `prefix` with `find``prefix`
 for file_counter in `seq 0 "$file_num"`; do
 	if [ "${found[$file_counter]}" = 0 ]; then
 		sed 's/'"$prefix"'/'"$find""$prefix"'/g' "${filenames[$file_counter]}"  > "testing/${filenames[$file_counter]}"
