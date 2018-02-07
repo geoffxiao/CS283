@@ -179,7 +179,7 @@ void prefix_prepend_all(char* original, char* prefix, char* find, char* final, c
     char* start_str = &original_temp[curr_loc]; // only look to the left of `curr_loc` byte in `original_temp`
     
     int num_changes = 0; // number of changes made
-    strcpy(log_str, "at character(s) "); // initialize
+    strcpy(log_str, "at character(s)"); // initialize
     
     // Keep running `prefix_prepend` until `prefix` is no longer in the `start_str` string
     while( strstr(start_str, prefix) != NULL )

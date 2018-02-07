@@ -23,9 +23,13 @@ For all '.txt' files in the current directory,
 	- If there are no occurrences of `find` or `prefix`, the file is unchanged
 	- The program modifies the '.txt' files in the current directory
 
+Makefile:
+	All = run target H3
+	H3 = compiles 'H3.c' into 'H3'
+	Clean = remove 'H3'
 
 --------------------------------------------------------------------------------------------------
-Program Structure:
+H3.c Program Structure:
 1. Loop through all .txt files in current directory
 2. Scan each .txt file line by line.
 3. For each line, use the function replace_all. This replaces all instaces of `find` with `replace.
@@ -42,19 +46,16 @@ Program Structure:
 --------------------------------------------------------------------------------------------------
 Testing:
 
-To test the program I wrote a Bash script that performs the same procedures as the C program. The 
-script uses the Bash `sed` command. The Bash script replaces `find` with `replace` and if 
-there are no instances of `find`, the script replaces `prefix` with `find``prefix`. The Bash 
-script then puts the processed files into a folder called 'testing'. 
-
-The Bash script is called 'bash-H3' and takes the same three commandline arguments as my program 'H3'.
-	To run: >> bash-H3 find replace prefix
-
+To test the program I wrote a Bash script 'Test' that performs the same procedures as the C 
+program. The script uses the Bash `sed` command. The Bash script replaces `find` with `replace` 
+and if there are no instances of `find`, the script replaces `prefix` with `find``prefix`. 
+The Bash script then puts the processed files into a folder called 'testing'. 
 
 The Bash script 'Test' takes three commandline arguments `find`, `replace`, and `prefix`. 'Test'
-runs my 'H3' C program and the 'bash-H3' Bash script using these arguments and compares the results
-using `diff`. If there is no output from 'Test' the C program and Bash script produced the same files.
-The stdout log from the 'H3' C program are placed into a file called H3-output.
+runs my 'H3' C program and the Bash sed commands using these three arguments and compares the 
+resulting files using `diff`. If there is no output from 'Test' the C program and Bash script 
+produced the same files. When 'Test' is run the stdout log from the 'H3' C program is placed 
+into a file called H3-output.
 	To run: >> Test find replace prefix
 
 
