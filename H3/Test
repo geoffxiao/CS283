@@ -27,17 +27,19 @@ file_num=0 # total number of files processed
 # Replace
 # Use sed to replace `find` with `replace`
 for filename in ./*.txt; do
+	
+	# is `find` in the file?
+	test_find=$(grep -s "$find" "$filename")
+	if [ -z $test_find ]; then
+  		found[file_num]=0 # not found, empty string
+	else
+		found[file_num]=0 # found
+	fi
+	
 	sed 's/'"$find"'/'"$replace"'/g' "$filename" > "testing/$filename"
 
+	# increment file arrays
 	filenames[file_num]=$filename
-
-	DIFF=$(diff "$filename" "testing/$filename") 
-	if [ "$DIFF" != "" ]; then
-  		found[file_num]=1 # found
-	else
-		found[file_num]=0 # not found
-	fi
-
 	file_num=$((file_num + 1))
 done
 
