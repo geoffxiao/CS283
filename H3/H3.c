@@ -20,7 +20,7 @@ void prefix_prepend_all(char* original, char* prefix, char* find, char* final, c
 int prefix_prepend(char* original, char* prefix, char* find, char* final, int start);
 
 // argv: 1 = find
-//	      2 = replace
+//	     2 = replace
 //       3 = prefix
 int main(int argc, char** argv)
 {

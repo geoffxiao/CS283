@@ -54,6 +54,7 @@ The Bash script is called 'bash-H3' and takes the same three commandline argumen
 The Bash script 'Test' takes three commandline arguments `find`, `replace`, and `prefix`. 'Test'
 runs my 'H3' C program and the 'bash-H3' Bash script using these arguments and compares the results
 using `diff`. If there is no output from 'Test' the C program and Bash script produced the same files.
+The stdout log from the 'H3' C program are placed into a file called H3-output.
 	To run: >> Test find replace prefix
 
 
