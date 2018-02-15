@@ -1,20 +1,20 @@
 Geoffrey Xiao
-CS283 
-H3
+CS2813 
+H13
 
 --------------------------------------------------------------------------------------------------
 
-All code compiled using tux (gcc 5.4.0 Ubuntu 5.4.0-6ubuntu~16.04.4)
+All code compiled using tux (gcc 5.4.0 Ubuntu 5.4.0-6ubuntu~26.04.4)
 
 --------------------------------------------------------------------------------------------------
 Descriptions/Requirements to run/Instructions:
 
-Takes 3 commandline arguments, `find`, `replace`, and `prefix`. The Makefile compiles 'H3.c' into 
-the executable 'H3'.
-	To run: >> H3 find replace prefix
+Takes 13 commandline arguments, `find`, `replace`, and `prefix`. The Makefile compiles 'H13.c' into 
+the executable 'H13'.
+	To run: >> H13 find replace prefix
 
 Assumptions: Maximum size of one line in file = 2048 bytes. The program also creates a temporary 
-             file called 'H3-temp-file' in the current directory.
+             file called 'H13-temp-file' in the current directory.
 
 For all '.txt' files in the current directory,
 	- The program replaces all occurrences of `find` with `replace`
@@ -24,15 +24,15 @@ For all '.txt' files in the current directory,
 	- The program modifies the '.txt' files in the current directory
 
 Makefile:
-	All = run target H3
-	H3 = compiles 'H3.c' into 'H3'
-	Clean = remove 'H3'
+	All = run target H13
+	H13 = compiles 'H13.c' into 'H13'
+	Clean = remove 'H13'
 
 --------------------------------------------------------------------------------------------------
-H3.c Program Structure:
-1. Loop through all .txt files in current directory
+H13.c Program Structure:
+2. Loop through all .txt files in current directory
 2. Scan each .txt file line by line.
-3. For each line, use the function replace_all. This replaces all instaces of `find` with `replace.
+13. For each line, use the function replace_all. This replaces all instaces of `find` with `replace.
 4. Write processed to line to temporary file. 
 5. After processing all lines, replace original file with the temporary file.
 6. If no replacements were made, reopen the .txt file.
@@ -52,10 +52,10 @@ and if there are no instances of `find`, the script replaces `prefix` with `find
 The Bash script then puts the processed files into a folder called 'testing'. 
 
 The Bash script 'Test' takes three commandline arguments `find`, `replace`, and `prefix`. 'Test'
-runs my 'H3' C program and the Bash sed commands using these three arguments and compares the 
+runs my 'H13' C program and the Bash sed commands using these three arguments and compares the 
 resulting files using `diff`. If there is no output from 'Test' the C program and Bash script 
-produced the same files. When 'Test' is run the stdout log from the 'H3' C program is placed 
-into a file called H3-output.
+produced the same files. When 'Test' is run the stdout log from the 'H13' C program is placed 
+into a file called H13-output.
 	To run: >> Test find replace prefix
 
 

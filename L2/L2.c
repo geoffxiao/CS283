@@ -10,6 +10,8 @@
 
 */
 
+// Copy file permissions too!!!
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,6 +52,9 @@ int main(int argc, char** argv)
 	char* dir_a_files[MAX_NUM_FILES]; char* dir_b_files[MAX_NUM_FILES];
 	char* dir_a_files_full_path[MAX_NUM_FILES];
 	char* dir_b_files_full_path[MAX_NUM_FILES];
+
+	if( strcmp(dir_a_name[strlen(dir_a_name)], "/") != 0 )
+
 
 	// Open directories
 	dir_a = Open_Dir(dir_a_name); dir_b = Open_Dir(dir_b_name);
