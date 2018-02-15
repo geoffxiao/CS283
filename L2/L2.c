@@ -102,6 +102,8 @@ int main(int argc, char** argv)
 // Copy file `from` to directory `to`
 void Copy_From_To(char* from, char* to)
 {
+	// Get file permissions of `from` file
+	// Copy these file permissions
 	FILE* from_file = fopen(from, "r");
 	FILE* to_file = fopen(to, "w+");
 
