@@ -99,11 +99,16 @@ int main(int argc, char** argv)
 }
 
 
+
+
 // Copy file `from` to directory `to`
 void Copy_From_To(char* from, char* to)
 {
 	// Get file permissions of `from` file
 	// Copy these file permissions
+	struct stat from_file_permissions; struct stat to_file_permissions;
+	stat(from, &from_file_permissions); stat(to, &to_file_permissions);
+
 	FILE* from_file = fopen(from, "r");
 	FILE* to_file = fopen(to, "w+");
 
@@ -112,12 +117,14 @@ void Copy_From_To(char* from, char* to)
 
 	while(1)
 	{
-		size_t bytes_read = fread(buffer,  sizeof(char), sizeof(buffer), from_file);
+		size_t bytes_read = fread(buffer, sizeof(char), sizeof(buffer), from_file);
 		fwrite(buffer, sizeof(char), bytes_read, to_file);
 		if(bytes_read < sizeof(buffer) && feof(from_file))
 			break;
 	}
-			
+	fclose(from_file); fclose(to_file); // close FILEs
+	chmod(from, from_file_permissions.st_mode & 07777); 
+	chmod(to, to_file_permissions.st_mode & 07777);
 }
 
 int Files_To_Copy(char** from_dir_files, char* from_dir, int from_dir_size, 
