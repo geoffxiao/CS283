@@ -8,9 +8,11 @@
 		other
 		Print a log of the program's activities to stdout or stderr
 
-*/
+		Program copies file permissions
 
-// Copy file permissions too!!!
+		Directory must end in a backslash just like command line `cp`
+
+*/
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -106,11 +108,18 @@ void Copy_From_To(char* from, char* to)
 {
 	// Get file permissions of `from` file
 	// Copy these file permissions
-	struct stat from_file_permissions; struct stat to_file_permissions;
-	stat(from, &from_file_permissions); stat(to, &to_file_permissions);
+	struct stat from_file_permissions; stat(from, &from_file_permissions);
 
 	FILE* from_file = fopen(from, "r");
 	FILE* to_file = fopen(to, "w+");
+
+	if(from_file == NULL)
+		perror("ERROR\n");
+
+	if(to_file == NULL)
+	{
+		perror("ERROR\n");
+	}
 
 	char buffer[256];
 	int bytes_read;
@@ -123,8 +132,9 @@ void Copy_From_To(char* from, char* to)
 			break;
 	}
 	fclose(from_file); fclose(to_file); // close FILEs
-	chmod(from, from_file_permissions.st_mode & 07777); 
-	chmod(to, to_file_permissions.st_mode & 07777);
+
+	// copy file permissions	
+	chmod(to, from_file_permissions.st_mode & 07777);
 }
 
 int Files_To_Copy(char** from_dir_files, char* from_dir, int from_dir_size, 
