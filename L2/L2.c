@@ -75,7 +75,7 @@ int main(int argc, char** argv)
 	//		+1 = copy the file into directory `a`
 	//		+2 = copy the file into directory `b`
 	//		 0 = do nothing
-	
+
 	int DELETE_FILE = -1;
 	int CP_TO_A = 1;
 	int CP_TO_B = 2;
@@ -105,17 +105,22 @@ int main(int argc, char** argv)
 		}
 	}	
 	
-	// If the file in `b` exists in `a`
+	// If the file in `a` exists in `b`, and file in `a` was modified 
+	// more recently, copy from `a` to `b`
 	for(int i = 0; i < dir_a_num_files; i++)
 	{
 		if( File_Exists(dir_a_files[i], dir_b_files, dir_b_num_files) )
 		{
 			// We will need to see which file was modified more recently
 			struct stat file_in_a;
-			stat(dir_a_files[i], &file_in_a);
+			char* file_in_a_path = Full_Path(dir_a_name, dir_a_files[i]);
+			if(stat(file_in_a_path, &file_in_a) < 0)
+				fprintf(stderr, "Error Accessing %s\n", file_in_a_path);
 
 			struct stat file_in_b;
-			stat(dir_b_files[i], &file_in_b);
+			char* file_in_b_path = Full_Path(dir_b_name, dir_a_files[i]);
+			if(stat(file_in_b_path, &file_in_b) < 0)
+				fprintf(stderr, "Error Accessing %s\n", file_in_b_path);
 			
 			// If `file_in_a` was modified more recently than `file_in_b`
 			// Copy the file in `a` to `b`
@@ -123,13 +128,38 @@ int main(int argc, char** argv)
 			{
 				dir_a_sync[i] = CP_TO_B; // copy file in `a` to `b`
 			}
-			else if ( difftime(file_in_a.st_mtime, file_in_b.st_mtime) < 0 )
+			free(file_in_a_path); free(file_in_b_path);
+		}
+	}
+
+	// If the file in `b` exists in `a` and the file in `b` was modified
+	// more recently, copy from `b` to `a`
+	for(int i = 0; i < dir_b_num_files; i++)
+	{
+		if( File_Exists(dir_b_files[i], dir_a_files, dir_a_num_files) )
+		{
+			// We will need to see which file was modified more recently
+			struct stat file_in_a;
+			char* file_in_a_path = Full_Path(dir_a_name, dir_a_files[i]);
+			if(stat(file_in_a_path, &file_in_a) < 0)
+				fprintf(stderr, "Error Accessing %s\n", file_in_a_path);
+
+			struct stat file_in_b;
+			char* file_in_b_path = Full_Path(dir_b_name, dir_a_files[i]);
+			if(stat(file_in_b_path, &file_in_b) < 0)
+				fprintf(stderr, "Error Accessing %s\n", file_in_b_path);
+
+			// If `file_in_b` was modified more recently than `file_in_a`
+			// Copy the file in `b` to `a`
+			if( difftime(file_in_a.st_mtime, file_in_b.st_mtime) < 0 )
 			{
 				dir_b_sync[i] = CP_TO_A; // copy file in `b` to `a`
 			}
+			free(file_in_a_path); free(file_in_b_path);
 		}
 	}
-	
+
+
 	// Now do the specified operations
 	
 	// Look at all the files in a
