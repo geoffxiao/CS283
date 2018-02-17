@@ -1,16 +1,19 @@
 /*
+	CS283 L2
+	Geoffrey Xiao
 
-		Take two arguments ./a and ./b.
-		If a file in a does not exist in b, replicate the file in a into b
-		If a file in b does not exist in a, it should be deleted from b
-		If a file exists in both directories a and b, the file with the most
-		recent modified date/time should be copied from one directory to the
-		other
-		Print a log of the program's activities to stdout or stderr
+	Take two arguments ./a and ./b.
+	If a file in a does not exist in b, replicate the file in a into b
+	If a file in b does not exist in a, it should be deleted from b
+	If a file exists in both directories a and b, the file with the most
+	recent modified date/time should be copied from one directory to the
+	other
+	
+	Print a log of the program's activities to stdout or stderr
 
-		Program copies file permissions
-
-		Directory must end in a backslash just like command line `cp`
+	Program copies file permissions
+	
+	Directory must end in a backslash just like command line `cp`
 
 */
 
@@ -136,7 +139,7 @@ int main(int argc, char** argv)
 		if(dir_a_sync[i] == DELETE_FILE)
 		{
 			char* full_path = Full_Path(dir_a_name, dir_a_files[i]);
-			// Delete_File(full_path);
+			Delete_File(full_path);
 			fprintf(stdout, "Deleted %s\n", full_path);
 			free(full_path);
 		}
@@ -146,7 +149,7 @@ int main(int argc, char** argv)
 		{
 			char* cp_from = Full_Path(dir_a_name, dir_a_files[i]);
 			char* cp_to = Full_Path(dir_b_name, dir_a_files[i]);
-			// Copy_From_To(cp_from, cp_to);
+			Copy_From_To(cp_from, cp_to);
 			fprintf(stdout, "Copied %s to %s\n", cp_from, cp_to);
 			free(cp_from); free(cp_to);			
 		}
@@ -159,7 +162,7 @@ int main(int argc, char** argv)
 		if(dir_b_sync[i] == DELETE_FILE)
 		{
 			char* full_path = Full_Path(dir_b_name, dir_b_files[i]);
-			// Delete_File(full_path);
+			Delete_File(full_path);
 			fprintf(stdout, "Deleted %s\n", full_path);
 			free(full_path);			
 		}
@@ -169,7 +172,7 @@ int main(int argc, char** argv)
 		{
 			char* cp_from = Full_Path(dir_b_name, dir_b_files[i]);
 			char* cp_to = Full_Path(dir_a_name, dir_b_files[i]);
-			// Copy_From_To(cp_from, cp_to);
+			Copy_From_To(cp_from, cp_to);
 			fprintf(stdout, "Copied %s to %s\n", cp_from, cp_to);
 			free(cp_from); free(cp_to);			
 		}
@@ -199,6 +202,7 @@ void Delete_File(char* file)
 
 
 // Copy file `from` to `to`. Copy file contents and file permissions
+// Arguments need to be the full path of the file.
 void Copy_From_To(char* from, char* to)
 {
 	// Get file permissions of `from` file
