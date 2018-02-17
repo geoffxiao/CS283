@@ -77,8 +77,10 @@ int main(int argc, char** argv)
 	int CP_TO_A = 1;
 	int CP_TO_B = 2;
 	
-	int dir_a_sync[dir_a_num_files] = {0};
-	int dir_b_sync[dir_b_num_files] = {0};
+	int dir_a_sync[dir_a_num_files];
+	memset(dir_a_sync, 0, dir_a_num_files * sizeof(int));
+	int dir_b_sync[dir_b_num_files];
+	memset(dir_b_sync, 0, dir_b_num_files * sizeof(int));
 	
 	// If file in `a` doesn't exist in `b`, copy the file in `a` to `b`
 	for(int i = 0; i < dir_a_num_files; i++)
