@@ -134,10 +134,9 @@ int main(int argc, char** argv)
 		if(dir_a_sync[i] == DELETE_FILE)
 		{
 			char* full_path = Full_Path(dir_a_name, dir_a_files[i]);
-			Delete_File(full_path);
-			free(full_path);
-			
+			// Delete_File(full_path);
 			fprintf(stdout, "Deleted %s\n", full_path);
+			free(full_path);
 		}
 		
 		// Copy the file from `a` to `b`
@@ -145,10 +144,9 @@ int main(int argc, char** argv)
 		{
 			char* cp_from = Full_Path(dir_a_name, dir_a_files[i]);
 			char* cp_to = Full_Path(dir_b_name, dir_a_files[i]);
-			Copy_From_To(cp_from, cp_to);
-			free(cp_from); free(cp_to);
-			
+			// Copy_From_To(cp_from, cp_to);
 			fprintf(stdout, "Copied %s to %s\n", cp_from, cp_to);
+			free(cp_from); free(cp_to);			
 		}
 	}
 	
@@ -159,10 +157,9 @@ int main(int argc, char** argv)
 		if(dir_b_sync[i] == DELETE_FILE)
 		{
 			char* full_path = Full_Path(dir_b_name, dir_b_files[i]);
-			Delete_File(full_path);
-			free(full_path);
-			
+			// Delete_File(full_path);
 			fprintf(stdout, "Deleted %s\n", full_path);
+			free(full_path);			
 		}
 		
 		// Copy the file from `b` to `a`
@@ -170,10 +167,9 @@ int main(int argc, char** argv)
 		{
 			char* cp_from = Full_Path(dir_b_name, dir_b_files[i]);
 			char* cp_to = Full_Path(dir_a_name, dir_b_files[i]);
-			Copy_From_To(cp_from, cp_to);
-			free(cp_from); free(cp_to);
-			
+			// Copy_From_To(cp_from, cp_to);
 			fprintf(stdout, "Copied %s to %s\n", cp_from, cp_to);
+			free(cp_from); free(cp_to);			
 		}
 	}	
 	
