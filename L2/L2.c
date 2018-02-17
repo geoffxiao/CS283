@@ -120,7 +120,7 @@ int main(int argc, char** argv)
 			{
 				dir_a_sync[i] = CP_TO_B; // copy file in `a` to `b`
 			}
-			else
+			else if ( difftime(file_in_a.st_mtime, file_in_b.st_mtime) < 0 )
 			{
 				dir_b_sync[i] = CP_TO_A; // copy file in `b` to `a`
 			}
