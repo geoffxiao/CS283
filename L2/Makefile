@@ -1,6 +1,6 @@
 .Phony : All Clean
 
-All : L2 Debug
+All : L2
 
 L2 : L2.c
 	gcc L2.c -o L2
@@ -10,4 +10,4 @@ Debug : L2.c
 	valgrind --leak-check=yes ./L2.o ./ ./
 
 Clean:
-	rm -f L2
+	rm -f L2 L2.o

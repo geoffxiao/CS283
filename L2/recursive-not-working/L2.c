@@ -17,6 +17,18 @@
 
 */
 
+
+
+
+// Needed for nftw
+#define _XOPEN_SOURCE 700
+
+// Maximum number of directories nftw will open simultaneously
+#ifndef USE_FDS
+#define USE_FDS 20
+#endif
+
+#include <ftw.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,33 +41,10 @@
 
 #define MAX_NUM_FILES 2048 // Maximum number of files in a directory
 
-
-// Open and return directory stream for `dir_name`
-//
-// Return directory stream for `dir_name` arg
-DIR* Open_Dir(char* dir_name);
-
-
-// Get all the files in `dir` directory stream, store files in `files` array
-//
-// Return number of files in `files` array. Modifies `files`
-int Get_Files(DIR* dir, char** files);
-
-
-// Filter files in `files` array. Only keep regular files.
-// `directory` = directory name, `files` = files array, num_files = size of
-// files array
-//
-// Returns number of regular files in `files_arra`. Modifies `files`
-int Get_Reg_Files(char* directory, char** files, int num_files); // Only get the regular files in a directory
-
-
-// Given an array `array` of size `array_size`, does `file` exist in
-// `array`?
+// Given an array `array` of size `array_size`, does `file` exist in `array`?
 //
 // Return True if `file` exists in `array`. False otherwise.
-bool File_Exists(char* file, char** array, int array_size); 
-
+bool File_Exists(char* file, char** array, int array_size);
 
 // Given a `dir` and a `file`, give the full pathname which is `dir``file`
 // `dir` has a '\' already
@@ -64,23 +53,52 @@ bool File_Exists(char* file, char** array, int array_size);
 // with `file
 char* Full_Path(char* dir, char* file);
 
-
 // Delete the file specified by `file`. `file` is full path name
 //
 // Side Effects: Delete `file`
-void Delete_File(char* file); // Delete file
-
+void Delete_File(char* file);
 
 // Copy the file from `from` address to `to` address. `from` and `to` are
 // full path names. Also copy the file permissions.
 //
 // Side Effets: copied `from` to `to`
-void Copy_From_To(char* from, char* to); // Copy a file from `from` to `to`
+void Copy_From_To(char* from, char* to);
+
+// Recursively earch through dir_a_name and store files (paths relative to
+// dir_a_name) in dir_a_files. Store number of files in dir_a_files in
+// dir_a_num_files.
+//
+// Side Effects: modify char** dir_a_files, modify int dir_a_num_files
+int get_dir_a_files(const char *filepath, const struct stat *info, 
+		const int typeflag, struct FTW *pathinfo);
 
 
-// Main
+// Recursively earch through dir_b_name and store files (paths relative to
+// dir_b_name) in dir_b_files. Store number of files in dir_b_files in
+// dir_b_num_files.
+//
+// Side Effects: modify char** dir_b_files, modify int dir_b_num_files
+int get_dir_b_files(const char *filepath, const struct stat *info, 
+		const int typeflag, struct FTW *pathinfo);
+
+
+// Global variables
+// dir_a_files = filename relative to dir_a_name
+// dir_b_files = filename relative to dir_b_name
+char* dir_a_files [MAX_NUM_FILES];
+int dir_a_num_files = 0; // number of files in dir_a
+char* dir_b_files [MAX_NUM_FILES];
+int dir_b_num_files = 0; // number of files in dir_b
+
+// directory names
+char* dir_a_name; 
+char* dir_b_name;
+
+
+// Main function
 int main(int argc, char** argv)
 {
+
 	// Error check
 	if(argc != 3)
 	{
@@ -89,7 +107,7 @@ int main(int argc, char** argv)
 	}
 
 	// Get directory names, check to make sure that they are directories
-	char* dir_a_name = argv[1]; char* dir_b_name = argv[2];
+	dir_a_name = argv[1]; dir_b_name = argv[2];
 	if( dir_a_name[strlen(dir_a_name) - 1] != '/' ||
 	 	 dir_b_name[strlen(dir_b_name) - 1] != '/' )
 	{
@@ -97,18 +115,15 @@ int main(int argc, char** argv)
 		exit(1);
 	}
 
-	// Init variables
-	DIR* dir_a; DIR* dir_b;
-	char* dir_a_files[MAX_NUM_FILES]; char* dir_b_files[MAX_NUM_FILES];
 
-	// Open directories
-	dir_a = Open_Dir(dir_a_name); dir_b = Open_Dir(dir_b_name);
-
-	// Get files in each directory
-	int dir_a_num_files = Get_Files(dir_a, dir_a_files); 
-	int dir_b_num_files = Get_Files(dir_b, dir_b_files);
-	dir_a_num_files = Get_Reg_Files(dir_a_name, dir_a_files, dir_a_num_files);	
-	dir_b_num_files = Get_Reg_Files(dir_b_name, dir_b_files, dir_b_num_files);	
+	// Get the files in dir_a_name and dir_b_name
+	// Store files (paths relative to dir name) in dir_a_files and dir_b_files
+	// dir_a_num_files and dir_b_num_files = num files in dir_a_name, dir_b_name
+	// nftw recursively searches through directory
+	if( nftw(dir_a_name, get_dir_a_files, USE_FDS, FTW_PHYS) < 0 )
+		fprintf(stderr, "Error Using nftw on Directory %s\n", dir_a_name);
+	if( nftw(dir_b_name, get_dir_b_files, USE_FDS, FTW_PHYS) < 0 )
+		fprintf(stderr, "Error Using nftw on Directory %s\n", dir_b_name);
 
 
 
@@ -123,8 +138,6 @@ int main(int argc, char** argv)
 	int CP_TO_A = 1;
 	int CP_TO_B = 2;
 	
-
-	// associated aray to keep track of syncing operations
 	int dir_a_sync[dir_a_num_files];
 	memset(dir_a_sync, 0, dir_a_num_files * sizeof(int));
 	int dir_b_sync[dir_b_num_files];
@@ -205,6 +218,7 @@ int main(int argc, char** argv)
 	}
 
 
+
 	// Now do the specified operations
 	
 	// Look at all the files in a
@@ -256,8 +270,6 @@ int main(int argc, char** argv)
 	exit(0);
 }
 
-
-
 // Create full path from directory name and file name. Returns dynamically
 // allocated C string.
 char* Full_Path(char* dir, char* file)
@@ -289,6 +301,12 @@ void Copy_From_To(char* from, char* to)
 	// Open files, check for errors
 	FILE* from_file = fopen(from, "r");
 	FILE* to_file = fopen(to, "w+");
+
+// Need to mkdir
+//	if (!is_dir($myDir)) {
+//		mkdir($myDir, 0777, true); // true for recursive create
+//	}
+
 	if(from_file == NULL)
 		fprintf(stderr, "Error Opening %s\n", from);
 
@@ -325,61 +343,37 @@ bool File_Exists(char* file, char** array, int array_size)
 	return false;
 }
 
-// Only get the regular files in the `files` array. Return number of regular
-// files
-int Get_Reg_Files(char* directory, char** files, int num_files)
-{
-	char* tmp;
-	struct stat check_file;
-	int c = 0;
 
-	for(int i = 0; i < num_files; i++)
-	{
-		tmp = malloc( strlen(directory) + strlen(files[i]) + 1 );
-		tmp[0] = '\0';
-		strcat(tmp, directory);
-		strcat(tmp, files[i]);
-		stat(tmp, &check_file);	
-	
-		// Only care about regular files
-		if( S_ISREG(check_file.st_mode) )
-		{
-			char* tmp2 = malloc( strlen(files[i]) + 1 );
-			strcpy(tmp2, files[i]);
-			free(files[c]);
-			files[c] = malloc( strlen(files[i]) + 1);
-			strcpy(files[c], tmp2);
-			free(tmp2);
-			c++;
-		}
-		free(tmp);
-	}
-	return c;
-}
-
-// Get all files in `DIR* dir`, save file names in `files` array
-int Get_Files(DIR* dir, char** files)
+// nftw runs this function. Recursively look through dir_a_name and save
+// files relative to dir_a_name directory in dir_a_files.
+int get_dir_a_files(const char *filepath, const struct stat *info, 
+		const int typeflag, struct FTW *pathinfo)
 {
-	int c = 0;
-	struct dirent* directory_ent;
-	while( (directory_ent = readdir(dir)) != NULL )
+	// Regular file?
+	if (typeflag == FTW_F) 
 	{
-		files[c] = malloc( sizeof(directory_ent->d_name) );
-		strcpy(files[c], directory_ent->d_name);
-		c++;
+		int offset = strlen(dir_a_name);
+		dir_a_files[dir_a_num_files] = malloc( strlen(filepath) + 1 - offset );
+		strcpy(dir_a_files[dir_a_num_files], &filepath[offset]);
+		dir_a_num_files++; // keep track of number of files
 	}
-	return c; // Number of files
+	return 0;
 }
 
 
-// Return `DIR*` (directory stream) for specified `dir_name`
-DIR* Open_Dir(char* dir_name)
+// nftw runs this function. Recursively look through dir_b_name and save
+// files relative to dir_b_name directory in dir_b_files.
+int get_dir_b_files(const char *filepath, const struct stat *info, 
+		const int typeflag, struct FTW *pathinfo)
 {
-	DIR* dir;
-	if( (dir = opendir(dir_name)) == NULL )
+	// Regular file?
+	if (typeflag == FTW_F) 
 	{
-		fprintf(stderr, "Failed to Open Directory %s\n", dir_name);
-		exit(1);
+		int offset = strlen(dir_b_name);
+		dir_b_files[dir_b_num_files] = malloc( strlen(filepath) + 1 - offset );
+		strcpy(dir_b_files[dir_b_num_files], &filepath[offset]);
+		dir_b_num_files++; // keep track of number of files
 	}
-	return dir;
+	return 0;
 }
+

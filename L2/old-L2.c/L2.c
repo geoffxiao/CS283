@@ -29,59 +29,18 @@
 
 #define MAX_NUM_FILES 2048 // Maximum number of files in a directory
 
-
-// Open and return directory stream for `dir_name`
-//
-// Return directory stream for `dir_name` arg
-DIR* Open_Dir(char* dir_name);
-
-
-// Get all the files in `dir` directory stream, store files in `files` array
-//
-// Return number of files in `files` array. Modifies `files`
-int Get_Files(DIR* dir, char** files);
-
-
-// Filter files in `files` array. Only keep regular files.
-// `directory` = directory name, `files` = files array, num_files = size of
-// files array
-//
-// Returns number of regular files in `files_arra`. Modifies `files`
+DIR* Open_Dir(char* dir_name); // Open directory stream
+int Get_Files(DIR* dir, char** files); // Get all the files in a directory
 int Get_Reg_Files(char* directory, char** files, int num_files); // Only get the regular files in a directory
-
-
-// Given an array `array` of size `array_size`, does `file` exist in
-// `array`?
-//
-// Return True if `file` exists in `array`. False otherwise.
-bool File_Exists(char* file, char** array, int array_size); 
-
-
-// Given a `dir` and a `file`, give the full pathname which is `dir``file`
-// `dir` has a '\' already
-//
-// Return pointer to dynamically allocated memory storing `dir` concatenated
-// with `file
-char* Full_Path(char* dir, char* file);
-
-
-// Delete the file specified by `file`. `file` is full path name
-//
-// Side Effects: Delete `file`
+bool File_Exists(char* file, char** array, int array_size); // Does `file` exist in `array`?
+char* Full_Path(char* dir, char* file); // Full path for a file
 void Delete_File(char* file); // Delete file
-
-
-// Copy the file from `from` address to `to` address. `from` and `to` are
-// full path names. Also copy the file permissions.
-//
-// Side Effets: copied `from` to `to`
 void Copy_From_To(char* from, char* to); // Copy a file from `from` to `to`
 
 
-// Main
 int main(int argc, char** argv)
 {
-	// Error check
+
 	if(argc != 3)
 	{
 		fprintf(stderr, "Invalid Number of Arguments\n");
@@ -110,8 +69,6 @@ int main(int argc, char** argv)
 	dir_a_num_files = Get_Reg_Files(dir_a_name, dir_a_files, dir_a_num_files);	
 	dir_b_num_files = Get_Reg_Files(dir_b_name, dir_b_files, dir_b_num_files);	
 
-
-
 	// Compare files in directory `a` and directory `b` to see how to sync files
 	// Make an array to keep track
 	//		-1 = delete the file
@@ -123,8 +80,6 @@ int main(int argc, char** argv)
 	int CP_TO_A = 1;
 	int CP_TO_B = 2;
 	
-
-	// associated aray to keep track of syncing operations
 	int dir_a_sync[dir_a_num_files];
 	memset(dir_a_sync, 0, dir_a_num_files * sizeof(int));
 	int dir_b_sync[dir_b_num_files];
@@ -255,8 +210,6 @@ int main(int argc, char** argv)
 	
 	exit(0);
 }
-
-
 
 // Create full path from directory name and file name. Returns dynamically
 // allocated C string.
