@@ -174,9 +174,65 @@ int main(int argc, char **argv)
 * when we type ctrl-c (ctrl-z) at the keyboard.
 */
 void eval(char *cmdline)
- {
-  return;
- }
+{
+	char * argv[256];
+	char buf[256];
+
+	strcpy(buf, cmdline);
+	int bg = parseline(buf, argv); // bg = 1 if to run job in bg
+
+	sigset_t mask; // mask for signal blocking in the main shell
+
+	if( argv[0] == NULL ) // empty line
+		return;
+
+	if( !builtin_cmd(argv) ) // try to run builtin_cmd
+	{
+		sigemptyset(&mask);
+		sigaddset(&mask, SIGCHLD);
+		sigaddset(&mask, SIGINT);
+		sigaddset(&mask, SIGTSTP);
+		sigprocmask(SIG_BLOCK, &mask, NULL);
+
+		// Does the argv[0] program exist?
+		if( access( argv[0], F_OK ) == -1 ) 
+		{
+			printf("Error %s Does not Exist\n", argv[0]);
+			return;
+		}
+
+		int pid;
+		if( (pid = fork()) < 0 )
+		{
+			printf("Error using fork in tsh.c\n");
+		}
+
+		if( pid == 0 ) // child, load and run program using execve
+		{
+			// distinguish main shell process group pid from job process group pid
+			sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
+			setpgid(0, 0); // allow children of this child to have new pid
+			execve(argv[0], argv, environ); // load and run program
+		}
+		else if( pid > 0 )// parent, main shell
+		{
+			if( !bg ) // FG job 
+			{
+				addjob(jobs, pid, FG, argv[0]);
+				sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
+				waitfg(pid); // Allow job to run in FG
+			}
+			else // BG job
+			{
+				addjob(jobs, pid, BG, argv[0]);
+				sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
+
+				// FIX
+				printf("[Job ID: %d] (PID: %d) in Background\n", pid, pid); // FIX!!!
+			}
+		}
+	}
+}
 
 /*
 * parseline - Parse the command line and build the argv array.
@@ -250,18 +306,31 @@ int parseline(const char *cmdline, char **argv)
 */
 int builtin_cmd(char **argv)
 {
-	if( !strcmp(argv[0], "quit") )
+	char* cmd = argv[0];
+
+	if( !strcmp(cmd, "quit") )
+	{
 		exit(0); // quit command
-	if( !strcmp(argv[0], "&") )
+	}
+	else if( !strcmp(cmd, "&") )
+	{
 		return 1; // ignore singleton & command
-	if( !strcmp(argv[0], "jobs") )
+	}
+	else if( !strcmp(cmd, "jobs") )
+	{
 		listjobs(jobs); // print jobs
+		printf("\n");
 		return 1;
-	if( !strcmp(argv[0], "bg") || !strcmp(argv[0], "fg") )
+	}
+	else if( !strcmp(cmd, "bg") || !strcmp(cmd, "fg") )
+	{
 		do_bgfg(argv);
 		return 1;
-
-	return 0;
+	}
+	else
+	{
+		return 0;
+	}
 	/* not a builtin command */
 }
 
@@ -270,35 +339,120 @@ int builtin_cmd(char **argv)
 * do_bgfg - Execute the builtin bg and fg commands
 */
 void do_bgfg(char **argv)
- {
-
-	// fg
-	if( !strcmp(argv[0], "fg") )
+{
+	if( argv[1] == NULL ) // no second argument in fg or bg
 	{
-		if( argv[1][0] == '&' ) // fg %#, referencing job ID
-		{
-			// get PID of job ID
-
-		}
-		else // fg #, referencing PID
-		{
-		
-		}	
+		printf("%s Needs an Argument\n", argv[0]);
+		return;
 	}
 
+	// the argument after bg or fg
+	char* bgfg_arg = malloc( strlen(argv[1]) + 1 ); // Extract arg after 'bg' or 'fg'
+	strcpy(bgfg_arg, argv[1]);
 
-	// bg
-  
-	 return;
- }
+	int job_id; 
+	struct job_t * job; 
+	pid_t job_pid;
+
+	if( bgfg_arg[0] == '%' ) // fg %#, referencing job ID
+	{
+		// which job to fg?
+		job_id = atoi( &bgfg_arg[1] );
+		job = getjobjid(jobs, job_id);
+		if( job == NULL )
+		{
+			printf("Job ID %d Does Not Exist\n", job_id);
+			return;
+		}
+		job_pid = job->pid;
+	}
+	else // fg #, # is the PID
+	{
+		// What job are we trying to operate on?
+		job_pid = (pid_t) atoi( bgfg_arg ); // convert to pid
+		job_id = pid2jid(job_pid);
+		job = getjobjid(jobs, job_id);
+		// The job we are trying to bg or fg does not exist
+		if( job == NULL )
+		{
+			printf("PID %d Does Not Exist\n", job_pid);
+			return;
+		}
+	}
+
+	// fg, switch background/suspended job to foreground
+	if( !strcmp(argv[0], "fg") )
+	{
+		// check job state if ST? or BG?
+		if( job->state == ST || job->state == BG )
+		{
+			// send SIGCONT to job_pid
+			if( kill(-job_pid, SIGCONT) < 0 ) 
+			{
+				printf("Error kill in tsh.c\n");
+			}
+			else // change job state to FG
+			{
+				job->state = FG;
+				waitfg(job_pid); // allow FG job to run
+			}
+		}
+		else // can't fg a job already in FG
+		{
+			printf("Job [Job ID: %d] (PID: %d) is Already in Foreground\n",
+					job->jid, job_pid);
+		}
+	}
+
+	// bg, restart a suspended job in background
+	else if( !strcmp(argv[0], "bg") )
+	{
+		// check job state if ST?
+		if( job->state == ST )
+		{
+			// send SIGCONT to job_pid
+			if( kill(-job_pid, SIGCONT) < 0 ) 
+			{
+				printf("Error kill in tsh.c\n");
+			}
+			else // change job state to BG
+			{
+				job->state = BG;
+			}
+		}
+		else // can only bg a job that is ST
+		{
+			printf("Job [Job ID: %d] (PID: %d) is Not Stopped\n",
+					job->jid, job_pid);
+		}
+	}
+
+	free(bgfg_arg);
+	return;
+}
 
 /*
 * waitfg - Block until process pid is no longer the foreground process
 */
+
+// called by the main shell
 void waitfg(pid_t pid)
- {
-  return;
- }
+{
+	struct job_t * fg_job = getjobpid(jobs, pid);
+	
+	// once FG job finishes, SIGCHLD sent to parent, main shell
+	// Block SIGTERM, SIGINT signals to main shell, we want these signals to
+	// go to FG job instead
+	// To block these signals, simply put main shell to sleep
+
+	if( fg_job == NULL )
+		return; // fg_job deleted somehow... from SIGCHLD signal, fg_job finished
+
+	while( fg_job->state == FG )
+	{
+		sleep(0.1); // put main shell to sleep	
+	}
+}
 
 /*****************
 * Signal handlers
@@ -315,34 +469,45 @@ void waitfg(pid_t pid)
 // A child (a tsch job) finished
 void sigchld_handler(int sig)
 {
-	pid_t pid;
+	pid_t child_pid;
 	int status;
 
+	// reap zombie children of main tsh shell process
 	// WNOHANG = don't wait for children running to terminate/stop
 	// WUNTRACED = look for term/stopped chldren
-	while( (pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0 ) // See which tsch jobs term/stop
-	{
-		job_t job = getjobpid(jobs, pid); // Get job id for pid 
 
-		if( WIFEXITED(status) ) // tsch job exited normally
+	// Use while loop to reap as many children as possible
+	while( (child_pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0 ) // See which tsch jobs term/stop
+	{
+		struct job_t * child_job = getjobpid(jobs, child_pid); // Get job id for pid 
+
+		if( WIFEXITED(status) ) // tsh job exited normally
 		{
-			deletejob(jobs, pid); // delete tsch job
-			return;
+			printf("Job [Job ID: %d] (PID: %d) Exited Normally (Status %d)\n", child_job->jid,
+					child_job->pid, WTERMSIG(status));
+			deletejob(jobs, child_pid); // delete tsh job
 		}
-		else if( WIFESIGNALED(status) ) // tsch job term b/c unhandled error
+		else if( WIFSIGNALED(status) ) // tsh job term b/c unhandled error
 		{
-			printf("Job [Job ID: %d] (PID: %d) Terminated by Signal %d\n", job->jid, job->pid, WTERM(status));
-			deletejob(jobs, pid);
-			return;
+			printf("Job [Job ID: %d] (PID: %d) Terminated by Unhandled Signal (Status %d)\n",
+					child_job->jid, child_job->pid, WTERMSIG(status));
+			deletejob(jobs, child_pid);
 		}
-		else if( WIFSTOPPED(status) ) // tsch job stopped
+		else if( WIFSTOPPED(status) ) // tsh job stopped
 		{
-			printf("Job [Job ID: %d] (PID: %d) Stopped\n", job->jid, job->pid);
-			job->state = ST; // update jobs array
-			return;
+			printf("Job [Job ID: %d] (PID: %d) Stopped\n", child_job->jid,
+					child_job->pid);
+			child_job->state = ST; // update jobs array
 		}	
 	}
 
+	// child_pid == -1, waitpid had error
+	if( errno == ECHILD ) // main shell has no children
+		// this is OK b/c it may be that no jobs run yet
+	{
+	}
+
+	return;
 }
 
 /*
@@ -351,21 +516,30 @@ void sigchld_handler(int sig)
 *    to the foreground job.
 */
 
-// ctrl+c in tsch
-// Need to terminate current fg job in tsch
+// ctrl+c in tsh
+// Need to terminate current fg job in tsh
 void sigint_handler(int sig)
 {
-	pid_t curr_fg = fgpid(jobs); // current foreground job
+	pid_t fg_pid = fgpid(jobs); // current foreground job
+	struct job_t * fg_job = getjobpid(jobs, fg_pid);
 
-	if( curr_fg == 0 ) // No current jobs
+	if( fg_pid == 0 ) // No current jobs
 	{
 		printf("No Foreground Jobs\n");
 		return;
 	}
-	else if( kill(-curr_fg, SIGINT) < 0 ) // kill this job and all others in its process group
-	{
-		printf("Error kill in tsch.c"); // tsch.c error
-		return;
+	else
+	{	
+		if( kill(-fg_pid, SIGINT) < 0 ) // kill this job and all others in its process group
+		{
+			printf("Error kill in tsh.c\n"); // tsh.c error
+		}
+		else // kill successful
+		{
+			printf("Job [Job ID: %d] (PID: %d) Terminated by Ctrl+C\n", fg_job->jid,
+					fg_pid);
+			// allow SIGCHLD handler to reap and delete job
+		}
 	}
 }
 
@@ -379,17 +553,26 @@ void sigint_handler(int sig)
 // Need to suspend the current fg tsch job
 void sigtstp_handler(int sig)
 {
-	pid_t curr_fg = fgpid(jobs); // current foreground job
+	pid_t fg_pid = fgpid(jobs); // current foreground job
+	struct job_t * fg_job = getjobpid(jobs, fg_pid);
 
-	if( curr_fg == 0 )
+	if( fg_pid == 0 )
 	{
 		printf("No Foreground Jobs\n");
 		return;
 	}
-	else if( kill(-curr_fg, SIGTSTP) < 0 ) // send signal to curr_fg
+	else
 	{
-		printf("Error Using Ctrl+Z");
-		return;
+		if( kill(-fg_pid, SIGTSTP) < 0 ) // send signal to stop job
+		{
+			printf("Error Using Ctrl+Z\n");
+		}
+		else // successful stop
+		{
+			printf("Job [Job ID: %d] (PID: %d) Stopped by Ctrl+Z\n", fg_job->jid,
+					fg_job->pid);
+			fg_job->state = ST;
+		}
 	}
 }
 
@@ -398,7 +581,7 @@ void sigtstp_handler(int sig)
 *********************/
 
 
-// Nothing changed below
+//-------------------- Nothing changed below -----------------------//
 
 /***********************************************
 * Helper routines that manipulate the job list
