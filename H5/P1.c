@@ -52,17 +52,14 @@ void doit(int fd)
   
     /* Read request line and headers */
     Rio_readinitb(&rio, fd);
-    Rio_readlineb(&rio, buf, MAXLINE);                   //line:netp:doit:readrequest
-	 Rio_writen(fd, buf, strlen(buf); // Echo request line 
 
-	 // Echo request headers
+	 // Echo until we see an empty line
     Rio_readlineb(&rio, buf, MAXLINE);
-    while(strcmp(buf, "\r\n")) {        
+    while(strcmp(buf, "\r\n")) 
+	 {        
 	 	Rio_writen(fd, buf, strlen(buf));
     	Rio_readlineb(&rio, buf, MAXLINE);
 	 }
- 
-
 }
 /* $end doit */
 
