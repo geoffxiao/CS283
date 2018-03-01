@@ -1,7 +1,8 @@
 /*
 * tsh - A tiny shell program with job control
 *
-* <Put your name and login ID here>
+* Geoffrey Xiao
+* gx26
 */
 #include <stdio.h>
 #include <stdlib.h>
