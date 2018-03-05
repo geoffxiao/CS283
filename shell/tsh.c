@@ -13,6 +13,8 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <errno.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 /* Misc manifest constants */
 #define MAXLINE 1024 /* max line size */
@@ -87,6 +89,69 @@ void app_error(char *msg);
 typedef void handler_t(int);
 handler_t *Signal(int signum, handler_t *handler);
 
+
+// Error wrapper for kill
+// Return 0 and print error message if kill failed
+// Return 1 if OK
+int Kill(pid_t pid, int sig)
+{
+	if( kill(pid, sig) < 0)
+	{
+		printf("Error Using kill in tsh.c\n");
+		return 0;
+	}
+	return 1;
+}
+
+
+// first_arg...whitespace...parse...whitespace...second_arg...whitespace
+void parse_pipe_redirect(char* cmdline, char** first_arg, char** second_arg, char parse)
+{
+    char c;
+    int len_first_arg = 0;
+
+    // find where 'parse' begins
+    while( (c = cmdline[len_first_arg]) != parse )
+    {
+        len_first_arg++;
+    }
+    
+    int start_second_arg = len_first_arg + 1; // start of second_arg
+    len_first_arg--; // backtrack before the parse
+    
+    // remove whitespace    
+    while( (c = cmdline[len_first_arg]) == ' ' )
+    {
+        len_first_arg--;
+    }
+    len_first_arg = len_first_arg + 1;
+    
+    // populate first_arg
+    first_arg[0] = malloc(len_first_arg + 1);
+    for(int i = 0; i < len_first_arg; i++)
+    {
+        first_arg[0][i] = cmdline[i];
+    }
+    first_arg[0][len_first_arg] = '\0';
+ 
+    // second_arg
+    // remove whitespace
+    while( (c = cmdline[start_second_arg]) == ' ' )
+    {
+        start_second_arg++;
+    }    
+    
+    // populate second_arg
+    second_arg[0] = malloc(strlen(cmdline) - start_second_arg);
+    for(int i = start_second_arg; i < strlen(cmdline) - 1; i++)
+    {
+        second_arg[0][i - start_second_arg] = cmdline[i];
+    }
+    
+}
+
+
+
 /*
 * main - The shell's main routine
 */
@@ -153,8 +218,48 @@ int main(int argc, char **argv)
       exit(0);
      }
 
-    /* Evaluate the command line */
-    eval(cmdline);
+	 if( strstr(cmdline, "|") ) // pipe
+	 {
+		// second_cmd stdin is first_cmd stdout
+		
+	 }
+	 else if( strstr(cmdline, ">") ) // file redirection
+	 {   
+	 	char* first_cmd[1]; char* second_cmd[1];
+		parse_pipe_redirect(cmdline, first_cmd, second_cmd, '>');
+
+		printf("%s\n", second_cmd[0]);
+
+		int redirect = open(second_cmd[0], O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR); // create new file 
+		int old_stdout = dup(STDOUT_FILENO); // old_stdout -> STDOUT
+
+		dup2(redirect, STDOUT_FILENO); // STDOUT -> redirect
+
+
+//	STRING PROCESSING FIX
+		// Add a " " (space) to first_cmd so we an parse correctly in eval
+		char* first_cmd2 = malloc(strlen(first_cmd[0]) + 2);
+		strcpy(first_cmd2, first_cmd[0]);
+		strcat(first_cmd2, " ");
+
+		eval(first_cmd2); // eval command using STDOUT -> redirect
+		dup2(old_stdout, STDOUT_FILENO); // STDOUT -> old_stdout
+
+		// close fds
+		close(redirect); close(old_stdout);
+
+		// free heap
+		free(first_cmd2); free(first_cmd[0]); free(second_cmd[0]);
+	 }
+	 else if( strstr(cmdline, "<") ) // file redirection
+	 {
+	    	
+	 }
+	 else
+	 {
+	 	/* Evaluate the command line */
+    	eval(cmdline);
+	 }
     fflush(stdout);
     fflush(stdout);
    }
@@ -229,10 +334,11 @@ void eval(char *cmdline)
 				sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
 
 				// FIX
-				printf("[Job ID: %d] (PID: %d) in Background\n", pid, pid); // FIX!!!
+				printf("Job [%d] (%d) Running in Background\n", pid, pid); // FIX!!!
 			}
 		}
 	}
+	return;
 }
 
 /*
@@ -388,11 +494,7 @@ void do_bgfg(char **argv)
 		if( job->state == ST || job->state == BG )
 		{
 			// send SIGCONT to job_pid
-			if( kill(-job_pid, SIGCONT) < 0 ) 
-			{
-				printf("Error kill in tsh.c\n");
-			}
-			else // change job state to FG
+			if( Kill(-job_pid, SIGCONT) ) 
 			{
 				job->state = FG;
 				waitfg(job_pid); // allow FG job to run
@@ -400,7 +502,7 @@ void do_bgfg(char **argv)
 		}
 		else // can't fg a job already in FG
 		{
-			printf("Job [Job ID: %d] (PID: %d) is Already in Foreground\n",
+			printf("Job [%d] (%d) is Already in Foreground\n",
 					job->jid, job_pid);
 		}
 	}
@@ -412,18 +514,14 @@ void do_bgfg(char **argv)
 		if( job->state == ST )
 		{
 			// send SIGCONT to job_pid
-			if( kill(-job_pid, SIGCONT) < 0 ) 
-			{
-				printf("Error kill in tsh.c\n");
-			}
-			else // change job state to BG
+			if( Kill(-job_pid, SIGCONT) ) 
 			{
 				job->state = BG;
 			}
 		}
 		else // can only bg a job that is ST
 		{
-			printf("Job [Job ID: %d] (PID: %d) is Not Stopped\n",
+			printf("Job [%d] (%d) is Not Stopped\n",
 					job->jid, job_pid);
 		}
 	}
@@ -446,13 +544,13 @@ void waitfg(pid_t pid)
 	// go to FG job instead
 	// To block these signals, simply put main shell to sleep
 
-	if( fg_job == NULL )
-		return; // fg_job deleted somehow... from SIGCHLD signal, fg_job finished
-
-	while( fg_job->state == FG )
+	// Keep sleeping while fg job is running
+	while( fgpid(jobs) == pid )
 	{
-		sleep(0.1); // put main shell to sleep	
+		sleep(1); // put main shell to sleep	
 	}
+
+	return;
 }
 
 /*****************
@@ -482,22 +580,27 @@ void sigchld_handler(int sig)
 	{
 		struct job_t * child_job = getjobpid(jobs, child_pid); // Get job id for pid 
 
+		if( verbose )
+		{
+			printf("sigchld_handler Entered by PID %d\n", getpid());
+		}
+
 		if( WIFEXITED(status) ) // tsh job exited normally
 		{
-			printf("Job [Job ID: %d] (PID: %d) Exited Normally (Status %d)\n", child_job->jid,
+			printf("Job [%d] (%d) Exited Normally Signal %d\n", child_job->jid,
 					child_job->pid, WTERMSIG(status));
 			deletejob(jobs, child_pid); // delete tsh job
 		}
 		else if( WIFSIGNALED(status) ) // tsh job term b/c unhandled error
 		{
-			printf("Job [Job ID: %d] (PID: %d) Terminated by Unhandled Signal (Status %d)\n",
+			printf("Job [%d] (%d) Terminated by Signal %d\n",
 					child_job->jid, child_job->pid, WTERMSIG(status));
 			deletejob(jobs, child_pid);
 		}
 		else if( WIFSTOPPED(status) ) // tsh job stopped
 		{
-			printf("Job [Job ID: %d] (PID: %d) Stopped\n", child_job->jid,
-					child_job->pid);
+			printf("Job [%d] (%d) Stopped by Signal %d\n", child_job->jid,
+					child_job->pid, WIFSTOPPED(status));
 			child_job->state = ST; // update jobs array
 		}	
 	}
@@ -531,15 +634,11 @@ void sigint_handler(int sig)
 	}
 	else
 	{	
-		if( kill(-fg_pid, SIGINT) < 0 ) // kill this job and all others in its process group
+		if( Kill(-fg_pid, SIGINT) ) // kill this job and all others in its process group
+		// successfully sent signal
 		{
-			printf("Error kill in tsh.c\n"); // tsh.c error
-		}
-		else // kill successful
-		{
-			printf("Job [Job ID: %d] (PID: %d) Terminated by Ctrl+C\n", fg_job->jid,
-					fg_pid);
-			// allow SIGCHLD handler to reap and delete job
+			if( verbose )
+				printf("Job [%d] (%d) Terminated by Ctrl+C\n", fg_job->jid, fg_pid);
 		}
 	}
 }
@@ -564,14 +663,11 @@ void sigtstp_handler(int sig)
 	}
 	else
 	{
-		if( kill(-fg_pid, SIGTSTP) < 0 ) // send signal to stop job
+		if( Kill(-fg_pid, SIGTSTP) ) // send signal to stop job
+		// successfully sent signal
 		{
-			printf("Error Using Ctrl+Z\n");
-		}
-		else // successful stop
-		{
-			printf("Job [Job ID: %d] (PID: %d) Stopped by Ctrl+Z\n", fg_job->jid,
-					fg_job->pid);
+			if( verbose )
+				printf("Job [%d] (%d) Stopped by Ctrl+Z\n", fg_job->jid, fg_job->pid);
 			fg_job->state = ST;
 		}
 	}
@@ -743,7 +839,7 @@ void listjobs(struct job_t *jobs)
         printf("Stopped ");
         break;
         default:
-        printf("listjobs: Internal error: job[%d].state=%d ",
+        printf("listjobs: Internal error: job[%d].state=%d\n",
         i, jobs[i].state);
        }
       printf("%s", jobs[i].cmdline);
