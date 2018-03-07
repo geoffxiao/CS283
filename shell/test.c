@@ -20,15 +20,18 @@ int main()
 	srand(time(NULL));
 	for(int j = 0; j < 5; j++)
 	{
+		int f = fork();
 		// Create child and have child sleep
-		if(fork() == 0)
+		if(f == 0)
 		{
 			printf("Child %d\n", j);
 			exit(0);
 		}
-		printf("%d_%d\n", j, getpid());
+		else if(f > 0)
+		{
+			printf("%d_%d_%d\n", j, getpid(), f);
+		}
 	}
-	
 	printf("Parent\n");
 
 	int status;

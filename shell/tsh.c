@@ -536,6 +536,7 @@ void eval(char *cmdline)
 			}
 			else if( pid == 0 ) // child
 			{
+				sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals	
 				setpgid(0,0);
 
 				int pid1; int pid2; // create two children
@@ -548,7 +549,8 @@ void eval(char *cmdline)
 				}
 				else if( pid1 == 0 ) // child1
 				{
-					dup2(STDOUT_FILENO, pipe_fd[1]); 
+					close(pipe_fd[0]); 
+					dup2(pipe_fd[1], STDOUT_FILENO); 
 					// program1 STDOUT -> pipe_fd[1] (for writing)
 
 					execve(argv1[0], argv1, environ); // load and run program
@@ -564,7 +566,8 @@ void eval(char *cmdline)
 				}
 				else if( pid2 == 0 ) // child2
 				{
-					dup2(STDIN_FILENO, pipe_fd[0]); 
+					close(pipe_fd[1]);
+					dup2(pipe_fd[0], STDIN_FILENO); 
 					// program2 STDIN -> pipe_fd[0] (for reading)
 
 					execve(argv2[0], argv2, environ); // load and run program
@@ -573,8 +576,8 @@ void eval(char *cmdline)
 				
 				int status;
 				// wait for pid1 and pid2
-				waitpid(-1, &status, 0);
-				waitpid(-1, &status, 0);
+				waitpid(pid1, &status, 0);
+				waitpid(pid2, &status, 0);
 				exit(0);
 			}
 			else // main shell
