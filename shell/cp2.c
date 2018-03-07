@@ -7,6 +7,9 @@
 * gx26
 */
 
+// FIX
+
+// parseline the pipes and shit
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -102,6 +105,18 @@ int Kill(pid_t pid, int sig);
 // wrapper for pipe function
 int pipe_func( int fd[2] );
 
+
+// Remove leading and trailing whitespace
+size_t trim_whitespace(char *out, size_t len, const char *str);
+
+// Parse the commands in a pipe/redirect
+// Cmd1 > Cmd2
+// Cmd1 < Cmd2
+// Cmd1 >> Cmd2
+// Cmd1 | Cmd2
+void parse_pipe_redirect(char* cmdline, char** first_arg, 
+								 char** second_arg, char* parse);
+
 /* End function headers */
 
 
@@ -116,23 +131,10 @@ int pipe_func( int fd[2] )
 	}
 	else
 	{
-		return 1;
+		return 0;
 	}
 }
 
-int fork_func()
-{
-	int pid = fork();
-	if( pid < 0 )
-	{
-		printf("\ntsh: Error Using fork in tsh.c\n");
-		return -1;
-	}
-	else
-	{
-		return pid;
-	}
-}
 
 
 // Error wrapper for kill
@@ -143,11 +145,85 @@ int Kill(pid_t pid, int sig)
 	if( kill(pid, sig) < 0)
 	{
 		printf("\ntsh: Error Using kill in tsh.c\n");
-		return -1;
+		return 0;
 	}
 	return 1;
 }
 
+// From: https://stackoverflow.com/questions/122616/how-do-i-trim-leading-trailing-whitespace-in-a-standard-way
+// Stores the trimmed input string into the given output buffer, which must be
+// large enough to store the result.  If it is too small, the output is
+// truncated.
+size_t trim_whitespace(char *out, size_t len, const char *str)
+{
+  if(len == 0)
+    return 0;
+
+  const char *end;
+  size_t out_size;
+
+  // Trim leading space
+  while(isspace((unsigned char)*str)) str++;
+
+  if(*str == 0)  // All spaces?
+  {
+    *out = 0;
+    return 1;
+  }
+
+  // Trim trailing space
+  end = str + strlen(str) - 1;
+  while(end > str && isspace((unsigned char)*end)) end--;
+  end++;
+
+  // Set output size to minimum of trimmed string length and buffer size minus 1
+  out_size = (end - str) < len-1 ? (end - str) : len-1;
+
+  // Copy trimmed string and add null terminator
+  memcpy(out, str, out_size);
+  out[out_size] = 0;
+
+  return out_size;
+}
+
+
+// first_arg...whitespace...parse...whitespace...second_arg...whitespace
+// get first_arg, add space to end of first_arg to allow proper eval processing
+// get second_arg, add space to end of second_arg to allow proper eval procssing
+void parse_pipe_redirect(char* cmdline, char** first_arg, 
+								 char** second_arg, char* parse)
+{
+    char* cmdline_cpy = malloc(strlen(cmdline) + 1);
+    strcpy(cmdline_cpy, cmdline);
+
+    //  get first argument
+    char* token = strtok(cmdline_cpy, parse);
+    char* first_arg_tmp = malloc(strlen(token) + 1);
+	 strcpy(first_arg_tmp, token);
+  	 trim_whitespace(first_arg_tmp, strlen(token) + 1, token);
+    
+    // get second argument
+    token = strtok(NULL, parse);
+    char* second_arg_tmp = malloc(strlen(token) + 1);
+    strcpy(second_arg_tmp, token); 
+    trim_whitespace(second_arg_tmp, strlen(token) + 1, token);
+    
+    // add space to end of first_arg
+    // needed b/c of eval's parseline
+    first_arg[0] = malloc(strlen(first_arg_tmp) + 2);
+    strcpy(first_arg[0], first_arg_tmp);
+    strcat(first_arg[0], " ");
+ 
+    // add space to end of second_arg
+    // needed b/c of eval's parseline
+    second_arg[0] = malloc(strlen(second_arg_tmp) + 2);
+    strcpy(second_arg[0], second_arg_tmp);
+    strcat(second_arg[0], " ");
+
+    free(cmdline_cpy);
+    free(first_arg_tmp);
+	 free(second_arg_tmp);
+}
 
 /* End my helper functions */
 
@@ -217,11 +293,10 @@ int main(int argc, char **argv)
       fflush(stdout);
       exit(0);
      }
-	 else
-	  {
-	 	/* evaluate the command line */
-	 	eval(cmdline); 
-	  }
+
+	 /* evaluate the command line */
+	 eval(cmdline); 
+	 
 	 fflush(stdout);
     fflush(stdout);
    }
@@ -230,65 +305,7 @@ int main(int argc, char **argv)
   /* control never reaches here */
  }
 
-// Does array contain str?
-// null terminated array
-// return -1 if not in array
-// else return index of the str
-int contains_string(char** array, char* str)
-{
-	char* tmp;
-	for(int i = 0; (tmp = array[i]) != NULL; i++)
-	{
-		if(strcmp(str, tmp) == 0)
-			return i;
-	}
-	return -1;
-}
 
-void redirect_and_run(char** argv1, char** argv2, 
-							 char*redirect_type, int open_flag, int old_fd)
-{
-	int redirect_fd = open(argv2[0], open_flag,
-								  S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
-	// create new file, default U=RW,G=RW,O=R
-
-	if(redirect_fd < 0)
-	{
-		printf("\ntsh: Error Opening %s\n", argv2[0]);
-		exit(1);
-	}              
-	else // open ok
-	{
-		// redirection
-		printf("\ntsh: Run %s and Redirect %s with %s\n",
- 	            argv1[0], redirect_type, argv2[0]);
-   	dup2(redirect_fd, old_fd); // old_fd -> redirect
-	}
-	execve(argv1[0], argv1, environ); // load and run program 
-	exit(1); // should never reach unless execve error
-}
-
-
-void cleanup_heap(char** argv1, char** argv2)
-{
-	// free heap
-	int i = 0;
-	char* tmp_ptr = argv1[i];
-	while(tmp_ptr != NULL)
-	{
-		free(argv1[i]);
-		i++;
-		tmp_ptr = argv1[i];
-	}
-
-	i = 0; tmp_ptr = argv2[i];
-	while(tmp_ptr != NULL)
-	{
-		free(argv2[i]);
-		i++;
-		tmp_ptr = argv2[i];
-	}
-}
 
 /*
 * eval - Evaluate the command line that the user has just typed in
@@ -306,95 +323,57 @@ void cleanup_heap(char** argv1, char** argv2)
 void eval(char *cmdline)
 {
 	char * argv[256];
-	char * argv1[256];
 	char * argv2[256];
 
-	argv1[0] = NULL; argv2[0] = NULL; // initialize
-
 	char buf[256];
+	char buf2[256];
 
 	int open_flag; int old_fd;
 	char* redirect_type;
 	
-	int redirect_flag = -1; // -1, no redirect
-	int pipe_flag = -1;
+	int redirect_flag = 0; // = 0, no redirect
+	int pipe_flag = 0;
 
-	strcpy(buf, cmdline);
-	int bg = parseline(buf, argv);
-
-	int loc;
 	// parse the cmdline for redirects
-
-	// STDOUT redirection
-	if((loc = contains_string(argv, ">>")) > 0)
+	if(strstr(cmdline, ">>"))
 	{
 	   // parse the ">>" redirect
-		// copy into argv1
-		int c = 0;
-		while(c < loc)
-		{
-			argv1[c] = malloc(strlen(argv[c]) + 1);
-			strcpy(argv1[c], argv[c]);
-			c++;
-		}
-		argv1[c] = NULL;
+	 	char* first_cmd[1]; char* second_cmd[1];
+		parse_pipe_redirect(cmdline, first_cmd, second_cmd, ">>");
+		strcpy(buf, first_cmd[0]); strcpy(buf2, second_cmd[0]);
+		free(first_cmd[0]); free(second_cmd[0]);
 
-		// copy into argv2
-		argv2[0] = malloc(strlen(argv[c + 1]) + 1);
-		strcpy(argv2[0], argv[c + 1]);
-		argv2[1] = NULL;
-
-		// stuff needed for redirect		
+		// stuff needed for pipe/redirect		
 		open_flag = O_APPEND | O_WRONLY;
 		old_fd = STDOUT_FILENO;
 		
 		redirect_flag = 1;
 		redirect_type = "STDOUT (Append)";
 	}
-	// STDOUT redirection
-	else if((loc = contains_string(argv, ">")) > 0)
+
+	else if(strstr(cmdline, ">"))
 	{
 	   // parse the ">" redirect
-		// copy into argv1
-		int c = 0;
-		while(c < loc)
-		{
-			argv1[c] = malloc(strlen(argv[c]) + 1);
-			strcpy(argv1[c], argv[c]);
-			c++;
-		}
-		argv1[c] = NULL;
+	 	char* first_cmd[1]; char* second_cmd[1];
+		parse_pipe_redirect(cmdline, first_cmd, second_cmd, ">");
+		strcpy(buf, first_cmd[0]); strcpy(buf2, second_cmd[0]);
+		free(first_cmd[0]); free(second_cmd[0]);
 
-		// copy into argv2
-		argv2[0] = malloc(strlen(argv[c + 1]) + 1);
-		strcpy(argv2[0], argv[c + 1]);
-		argv2[1] = NULL;
-
-		// stuff needed for redirect		
+		// stuff needed for pipe/redirect		
 		open_flag = O_CREAT | O_TRUNC | O_WRONLY;
 		old_fd = STDOUT_FILENO;
 		
 		redirect_flag = 1;
 		redirect_type = "STDOUT";
 	}
-	// STDIN redirection
-	else if((loc = contains_string(argv, "<")) > 0)
+
+	else if(strstr(cmdline, "<"))
 	{
 	   // parse the "<" redirect
-		// copy into argv1
-		int c = 0;
-		while(c < loc)
-		{
-			argv1[c] = malloc(strlen(argv[c]) + 1);
-			strcpy(argv1[c], argv[c]);
-			c++;
-		}
-		argv1[c] = NULL;
-
-		// copy into argv2
-		argv2[0] = malloc(strlen(argv[c + 1]) + 1);
-		strcpy(argv2[0], argv[c + 1]);
-		argv2[1] = NULL;
+	 	char* first_cmd[1]; char* second_cmd[1];
+		parse_pipe_redirect(cmdline, first_cmd, second_cmd, "<");
+		strcpy(buf, first_cmd[0]); strcpy(buf2, second_cmd[0]);
+		free(first_cmd[0]); free(second_cmd[0]);
 
 		// stuff needed for pipe/redirect		
 		open_flag = O_RDONLY;
@@ -403,56 +382,107 @@ void eval(char *cmdline)
 		redirect_flag = 1;
 		redirect_type = "STDIN";
 	}
+
 	// No pipe support for builtin commands
 	// pipe
-	else if((loc = contains_string(argv, "|")) > 0)
+	else if(strstr(cmdline, "|"))
 	{
 	   // parse the "|" redirect
-		// copy into argv1
-		int c = 0;
-		while(c < loc)
-		{
-			argv1[c] = malloc(strlen(argv[c]) + 1);
-			strcpy(argv1[c], argv[c]);
-			c++;
-		}
-		argv1[c] = NULL;
+	 	char* first_cmd[1]; char* second_cmd[1];
+		parse_pipe_redirect(cmdline, first_cmd, second_cmd, "|");
+		strcpy(buf, first_cmd[0]);
 
-		// copy into argv2
-	  	int start = loc + 1;
-		c = start; // loc + 1 b/c we want to skip the ">"
-		char* tmp_ptr = argv[start];
-		while( tmp_ptr != NULL )
-		{
-			argv2[c - start] = malloc(strlen(argv[c]) + 1);
-			strcpy(argv2[c - start], argv[c]);
-			c++; tmp_ptr = argv[c];
-		}
-		argv2[c - start] = NULL;
+		// parse the commandline
+	
+		free(first_cmd[0]); free(second_cmd[0]);
 
-		// for pipe
+		// stuff needed for pipe/redirect		
+		open_flag = O_RDONLY;
+		old_fd = STDIN_FILENO;
+		
 		pipe_flag = 1;
 	}
+
 	// No redirection + No pipes
 	else
+	{	
+		strcpy(buf, cmdline);
+	}
+
+
+	// parse the commandline
+	char* tmp_array[256]; char* tmp_array2[256]; char* tmp_ptr;
+	
+	int bg = parseline(buf, tmp_array);
+	// copy into argv
+	tmp_ptr = tmp_array[0]; int c = 0;
+	while( tmp_ptr != NULL )
 	{
-		int c = 0;
-		char* tmp_ptr = argv[c];
+		argv[c] = malloc(strlen(tmp_array[c]) + 1);
+		strcpy(argv[c], tmp_array[c]);
+		c++;
+		tmp_ptr = tmp_array[c];
+	}
+
+	// had two commands b/c redirect/flag
+	if(pipe_flag > 0 || redirect_flag > 0)
+	{
+		int bg2 = parseline(buf2, tmp_array2);
+		// copy into argv2
+		tmp_ptr = tmp_array2[0]; c = 0;
 		while( tmp_ptr != NULL )
 		{
-			argv1[c] = malloc(strlen(argv[c]) + 1);
-			strcpy(argv1[c], argv[c]);
-			c++; tmp_ptr = argv[c];
+			argv2[c] = malloc(strlen(tmp_array2[c]) + 1);
+			strcpy(argv2[c], tmp_array2[c]);
+			c++;
+			tmp_ptr = tmp_array2[c];
 		}
-		argv1[c] = NULL;
+		bg = bg || bg2;
 	}
 
 	if( argv[0] == NULL ) // empty line
-	{
 		return;
+
+	int builtin; // builtin cmd?
+
+	// Try to run as builtin
+	// redirect, flag > 0
+	if(redirect_flag > 0)
+	{
+		// redirection for builtins
+		int redirect_fd = open(argv2[0], open_flag, 
+								     S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP
+     	                    	  | S_IROTH); // create new file, default U=RW,G=RW,O=R
+
+		if(redirect_fd < 0)
+		{
+			printf("\ntsh: Error Opening %s\n", argv2[0]);
+		}
+		else // open ok
+		{
+			int old_fd_cpy = dup(old_fd); // old_fd_cpy -> old_fd (save a copy)
+		
+			// redirection and run
+			dup2(redirect_fd, old_fd); // old_fd -> redirect
+			builtin = builtin_cmd(argv); // run builtin
+			dup2(old_fd_cpy, old_fd); // revert, old_fd -> old_fd_cpy
+
+			// actually ran a builtin
+			if(builtin)
+			{
+				printf("\ntsh: Run %s and Redirect %s with %s\n", 
+      	   		 argv[0], redirect_type, argv2[0]);
+			}
+
+			// close fds
+			close(redirect_fd); close(old_fd_cpy);
+		}
+	}
+	else // No redirects, run builtin cmd
+	{
+		builtin = builtin_cmd(argv); // run builtin
 	}
 
-	int builtin = builtin_cmd(argv1); // run builtin
 
 	if(!builtin) // not a builtin
 	{
@@ -463,191 +493,105 @@ void eval(char *cmdline)
 		sigaddset(&mask, SIGTSTP);
 		sigprocmask(SIG_BLOCK, &mask, NULL);
 
-		if( redirect_flag > 0 ) // redirection
+		// Does the argv[0] program exist?
+		if( access( argv[0], F_OK ) == -1 ) 
 		{
-			int pid;
-			if( (pid = fork()) < 0 )
-			{
-				printf("\ntsh: Error Using fork in tsh.c\n");
-				cleanup_heap(argv1, argv2);
-				return;
-			}
-			else if( pid == 0 ) // child
-			{
-				if( argv2[0] == NULL )
-				{
-					printf("\ntsh: No Redirection File Provided\n");
-					exit(1);
-				}
-
-				if( access( argv1[0], F_OK ) == -1 ) 
-				{
-					printf("\ntsh: Error %s Does not Exist\n", argv1[0]);
-					exit(1);
-				}
-
-				// distinguish main shell process group pid from job process group pid
-				sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
-				setpgid(0, 0); // allow children of this child to have new pid
-				redirect_and_run(argv1, argv2, redirect_type, open_flag, old_fd); 
-				exit(1); // should reach only if execve messed up
-			}
-			else // pid > 0, parent
-			{
-				if( !bg ) // FG job 
-				{
-					addjob(jobs, pid, FG, argv1[0]);
-					sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
-					waitfg(pid); // Allow job to run in FG
-				}
-				else // BG job
-				{
-					addjob(jobs, pid, BG, argv1[0]);
-					sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
-
-					int jid = pid2jid(pid);
-					printf("\ntsh: Job [%d] (%d) Running in Background\n", jid, pid);
-				}
-			}
+			printf("\ntsh: Error %s Does not Exist\n", argv[0]);
+			return;
 		}
-		else if( pipe_flag > 0 ) // pipe
+
+		int pid;
+		if( (pid = fork()) < 0 )
 		{
-			int pipe_fd[2];
-			if( pipe_func(pipe_fd) < 0 )
+			printf("\ntsh: Error Using fork in tsh.c\n");
+		}
+
+		else if( pid == 0 ) // child, load and run program using execve
+		{
+			// distinguish main shell process group pid from job process group pid
+			sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
+			setpgid(0, 0); // allow children of this child to have new pid
+
+			// pipe
+			// child creates another child to run the second program of the
+			// pipe
+			if( pipe_flag > 0 )
 			{
-				printf("\ntsh: Error Using pipe in tsh.c\n");
-				cleanup_heap(argv1, argv2);
-				return;
+				int pipe_fd[2];
+				if( pipe_func(pipe_fd) > 0 )
+				{
+					int pid2;
+					if( (pid2 = fork()) < 0 )
+					{
+						printf("\ntsh: Error Using fork in tsh.c\n");
+					}
+					else 
+					{
+						printf("\ntsh: Run Pipe Between %s and %s\n", argv[0],
+								argv2[0]);
+
+						if( pid2 > 0 ) // argv[0] program
+						{
+							dup2(STDOUT_FILENO, pipe_fd[1]); 
+							// program1 STDOUT -> pipe_fd[1] (for writing)
+
+							execve(argv[0], argv, environ); // load and run program
+						}
+						else if( pid2 == 0 ) // argv2[0] program
+						{
+							dup2(STDIN_FILENO, pipe_fd[0]);
+							// program2 STDIN -> pipe_fd[0] (for reading)
+								
+							execve(argv2[0], argv2, environ); // load and run program
+						}
+					}
+				}
 			}
 
-			int pid = fork_func();
-			if( pid < 0 )
+			// child undergoes file redirection
+			else if(redirect_flag > 0)
 			{
-				printf("\ntsh: Error Using fork in tsh.c\n");
-				cleanup_heap(argv1, argv2);
-				return;
-			}
-			else if( pid == 0 ) // child
-			{
-				sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
-				setpgid(0,0);
-
-				int pid1; int pid2; // create two children
-				pid1 = fork_func();
-				if( pid1 < 0 )
-				{
-					printf("\ntsh: Error Using fork in tsh.c\n");
-					cleanup_heap(argv1, argv2);
-					return;
-				}
-				else if( pid1 == 0 ) // child1
-				{
-					dup2(STDOUT_FILENO, pipe_fd[1]); 
-					// program1 STDOUT -> pipe_fd[1] (for writing)
-
-					execve(argv1[0], argv1, environ); // load and run program
-					exit(1);
-				}
-
-				pid2 = fork_func();
-				if( pid2 < 0 )
-				{
-					printf("\ntsh: Error Using fork in tsh.c\n");
-					cleanup_heap(argv1, argv2);
-					return;
-				}
-				else if( pid2 == 0 ) // child2
-				{
-					dup2(STDIN_FILENO, pipe_fd[0]); 
-					// program2 STDIN -> pipe_fd[0] (for reading)
-
-					execve(argv2[0], argv2, environ); // load and run program
-					exit(1);
-				}
-				
-				int status;
-				// wait for pid1 and pid2
-				waitpid(-1, &status, 0);
-				waitpid(-1, &status, 0);
-				exit(0);
-			}
-			else // main shell
-			{
-				printf("\ntsh: Run %s | %s\n", 
-  	     			 	  argv1[0], argv2[0]);
-
-				char* job_str = malloc(strlen(argv1[0]) + strlen(argv2[0]) +
-										  strlen(" | ") + 1);
-				strcpy(job_str, argv1[0]);
-				strcat(job_str, " | ");
-				strcat(job_str, argv2[0]);		
+				int redirect_fd = open(argv2[0], open_flag, 
+											  S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP
+  	 	     	   	            	  | S_IROTH); 
+				// create new file, default U=RW,G=RW,O=R
 	
-				if( !bg ) // FG job 
+				if(redirect_fd < 0)
 				{
-					addjob(jobs, pid, FG, job_str);
-					sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
-					waitfg(pid); // Allow job to run in FG
+					printf("\ntsh: Error Opening %s\n", argv2[0]);
 				}
-				else // BG job
+				else // open ok
 				{
-					addjob(jobs, pid, BG, job_str);
-					sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
-
-					int jid = pid2jid(pid);
-					printf("\ntsh: Job [%d] (%d) Running in Background\n", 
-							 jid, pid);
+					// redirection
+					printf("\ntsh: Run %s and Redirect %s with %s\n", 
+  	    	   		 	  argv[0], redirect_type, argv2[0]);	
+					dup2(redirect_fd, old_fd); // old_fd -> redirect
 				}
-				free(job_str);
 			}
+			execve(argv[0], argv, environ); // load and run program
 		}
-		else // no pipe or redirect
+
+
+		else if( pid > 0 )// parent, main shell
 		{
-			int pid;
-			if( (pid = fork()) < 0 )
+			if( !bg ) // FG job 
 			{
-				printf("\ntsh: Error Using fork in tsh.c\n");
-				cleanup_heap(argv1, argv2);
-				return;
-			}
-			else if( pid == 0 ) // child
-			{
-				// Does the argv1[0] program exist?
-				if( access( argv1[0], F_OK ) == -1 ) 
-				{
-					printf("\ntsh: Error %s Does not Exist\n", argv1[0]);
-					exit(1);
-				}
-
-				// distinguish main shell process group pid from job process group pid
+				addjob(jobs, pid, FG, argv[0]);
 				sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
-				setpgid(0, 0); // allow children of this child to have new pid
-				execve(argv1[0], argv1, environ); // load and run program	
-				exit(1); // should only reach if execve messed up
+				waitfg(pid); // Allow job to run in FG
 			}
-			else // pid > 0, parent
+			else // BG job
 			{
-				if( !bg ) // FG job 
-				{
-					addjob(jobs, pid, FG, argv1[0]);
-					sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
-					waitfg(pid); // Allow job to run in FG
-				}
-				else // BG job
-				{
-					addjob(jobs, pid, BG, argv1[0]);
-					sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
+				addjob(jobs, pid, BG, argv[0]);
+				sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
 
-					int jid = pid2jid(pid);
-					printf("\ntsh: Job [%d] (%d) Running in Background\n", jid, pid);
-				}
+				// FIX, pid, pid
+				printf("\ntsh: Job [%d] (%d) Running in Background\n", pid, pid); // FIX!!!
 			}
 		}
 	}
-	
-	cleanup_heap(argv1, argv2);
 	return;
 }
-
 
 /*
 * parseline - Parse the command line and build the argv array.
@@ -802,7 +746,7 @@ void do_bgfg(char **argv)
 		if( job->state == ST || job->state == BG )
 		{
 			// send SIGCONT to job_pid
-			if( Kill(-job_pid, SIGCONT) > 0 ) 
+			if( Kill(-job_pid, SIGCONT) ) 
 			{
 				job->state = FG;
 				waitfg(job_pid); // allow FG job to run
@@ -822,7 +766,7 @@ void do_bgfg(char **argv)
 		if( job->state == ST )
 		{
 			// send SIGCONT to job_pid
-			if( Kill(-job_pid, SIGCONT) > 0 ) 
+			if( Kill(-job_pid, SIGCONT) ) 
 			{
 				job->state = BG;
 			}
@@ -908,7 +852,7 @@ void sigchld_handler(int sig)
 		else if( WIFSTOPPED(status) ) // tsh job stopped
 		{
 			printf("\ntsh: Job [%d] (%d) Stopped by Signal %d\n", child_job->jid,
-					child_job->pid, WSTOPSIG(status));
+					child_job->pid, WIFSTOPPED(status));
 			child_job->state = ST; // update jobs array
 		}	
 	}
@@ -942,7 +886,7 @@ void sigint_handler(int sig)
 	}
 	else
 	{	
-		if( Kill(-fg_pid, SIGINT) > 0 ) // kill this job and all others in its process group
+		if( Kill(-fg_pid, SIGINT) ) // kill this job and all others in its process group
 		// successfully sent signal
 		{
 			if( verbose )
@@ -971,7 +915,7 @@ void sigtstp_handler(int sig)
 	}
 	else
 	{
-		if( Kill(-fg_pid, SIGTSTP) > 0 ) // send signal to stop job
+		if( Kill(-fg_pid, SIGTSTP) ) // send signal to stop job
 		// successfully sent signal
 		{
 			if( verbose )

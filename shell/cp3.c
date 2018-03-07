@@ -245,51 +245,6 @@ int contains_string(char** array, char* str)
 	return -1;
 }
 
-void redirect_and_run(char** argv1, char** argv2, 
-							 char*redirect_type, int open_flag, int old_fd)
-{
-	int redirect_fd = open(argv2[0], open_flag,
-								  S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
-	// create new file, default U=RW,G=RW,O=R
-
-	if(redirect_fd < 0)
-	{
-		printf("\ntsh: Error Opening %s\n", argv2[0]);
-		exit(1);
-	}              
-	else // open ok
-	{
-		// redirection
-		printf("\ntsh: Run %s and Redirect %s with %s\n",
- 	            argv1[0], redirect_type, argv2[0]);
-   	dup2(redirect_fd, old_fd); // old_fd -> redirect
-	}
-	execve(argv1[0], argv1, environ); // load and run program 
-	exit(1); // should never reach unless execve error
-}
-
-
-void cleanup_heap(char** argv1, char** argv2)
-{
-	// free heap
-	int i = 0;
-	char* tmp_ptr = argv1[i];
-	while(tmp_ptr != NULL)
-	{
-		free(argv1[i]);
-		i++;
-		tmp_ptr = argv1[i];
-	}
-
-	i = 0; tmp_ptr = argv2[i];
-	while(tmp_ptr != NULL)
-	{
-		free(argv2[i]);
-		i++;
-		tmp_ptr = argv2[i];
-	}
-}
-
 /*
 * eval - Evaluate the command line that the user has just typed in
 *
@@ -451,8 +406,49 @@ void eval(char *cmdline)
 	{
 		return;
 	}
+	int builtin = 0; // builtin cmd?
 
-	int builtin = builtin_cmd(argv1); // run builtin
+	// Try to run cmdline as builtin
+
+	// redirect, redirect_flag > 0
+	// If redirect + builtin
+	if(redirect_flag > 0)
+	{
+		// redirection for builtins
+		int redirect_fd = open(argv2[0], open_flag, 
+								     S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP
+     	                    	  | S_IROTH); // create new file, default U=RW,G=RW,O=R
+		if(redirect_fd < 0)
+		{
+			printf("\ntsh: Error Opening %s\n", argv2[0]);
+		}
+		else // open ok
+		{
+			int old_fd_cpy = dup(old_fd); // old_fd_cpy -> old_fd (save a copy)
+		
+			// redirection and run
+			dup2(redirect_fd, old_fd); // old_fd -> redirect
+			builtin = builtin_cmd(argv1); // run builtin
+			dup2(old_fd_cpy, old_fd); // revert, old_fd -> old_fd_cpy
+
+			// actually ran a builtin
+			if(builtin)
+			{
+				printf("\ntsh: Run %s and Redirect %s with %s\n", 
+      	   		 argv1[0], redirect_type, argv2[0]);
+			}
+
+			// close fds
+			close(redirect_fd); close(old_fd_cpy);
+		}
+	}
+	else // No redirects, run builtin cmd
+	{
+		builtin = builtin_cmd(argv1); // run builtin
+	}
+
+
+
 
 	if(!builtin) // not a builtin
 	{
@@ -463,191 +459,128 @@ void eval(char *cmdline)
 		sigaddset(&mask, SIGTSTP);
 		sigprocmask(SIG_BLOCK, &mask, NULL);
 
-		if( redirect_flag > 0 ) // redirection
+		// Does the argv1[0] program exist?
+		if( access( argv1[0], F_OK ) == -1 ) 
 		{
-			int pid;
-			if( (pid = fork()) < 0 )
+			printf("\ntsh: Error %s Does not Exist\n", argv1[0]);
+			return;
+		}	
+		
+		int pipe_fd[2];
+		if( pipe_flag > 0 )
+		{
+			pipe_func(pipe_fd);
+		}
+
+		int pid;
+		if( (pid = fork()) < 0 )
+		{
+			printf("\ntsh: Error Using fork in tsh.c\n");
+		}
+		else if( pid == 0 ) // child, load and run program using execve
+		{
+			// distinguish main shell process group pid from job process group pid
+			sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
+			setpgid(0, 0); // allow children of this child to have new pid
+			
+			// pipe
+			if(pipe_flag > 0)
 			{
-				printf("\ntsh: Error Using fork in tsh.c\n");
-				cleanup_heap(argv1, argv2);
-				return;
+				dup2(STDOUT_FILENO, pipe_fd[1]); 
+				// program1 STDOUT -> pipe_fd[1] (for writing)
+
+				execve(argv1[0], argv1, environ); // load and run program
 			}
-			else if( pid == 0 ) // child
+			// redirection
+			else if(redirect_flag > 0)
 			{
-				if( argv2[0] == NULL )
+				int redirect_fd = open(argv2[0], open_flag, 
+											  S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP
+  	 	     	   	            	  | S_IROTH); 
+				// create new file, default U=RW,G=RW,O=R
+	
+				if(redirect_fd < 0)
 				{
-					printf("\ntsh: No Redirection File Provided\n");
-					exit(1);
+					printf("\ntsh: Error Opening %s\n", argv2[0]);
+				}
+				else // open ok
+				{
+					// redirection
+					printf("\ntsh: Run %s and Redirect %s with %s\n", 
+  	    	   		 	  argv1[0], redirect_type, argv2[0]);	
+					dup2(redirect_fd, old_fd); // old_fd -> redirect
 				}
 
-				if( access( argv1[0], F_OK ) == -1 ) 
-				{
-					printf("\ntsh: Error %s Does not Exist\n", argv1[0]);
-					exit(1);
-				}
-
-				// distinguish main shell process group pid from job process group pid
-				sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
-				setpgid(0, 0); // allow children of this child to have new pid
-				redirect_and_run(argv1, argv2, redirect_type, open_flag, old_fd); 
-				exit(1); // should reach only if execve messed up
+				execve(argv1[0], argv1, environ); // load and run program
 			}
-			else // pid > 0, parent
+			else
 			{
-				if( !bg ) // FG job 
-				{
-					addjob(jobs, pid, FG, argv1[0]);
-					sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
-					waitfg(pid); // Allow job to run in FG
-				}
-				else // BG job
-				{
-					addjob(jobs, pid, BG, argv1[0]);
-					sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
-
-					int jid = pid2jid(pid);
-					printf("\ntsh: Job [%d] (%d) Running in Background\n", jid, pid);
-				}
+				execve(argv1[0], argv1, environ);
 			}
 		}
-		else if( pipe_flag > 0 ) // pipe
+		else if( pid > 0 )// parent, main shell
 		{
-			int pipe_fd[2];
-			if( pipe_func(pipe_fd) < 0 )
+			// pipe -> make another child
+			if( pipe_flag > 0 )
 			{
-				printf("\ntsh: Error Using pipe in tsh.c\n");
-				cleanup_heap(argv1, argv2);
-				return;
-			}
-
-			int pid = fork_func();
-			if( pid < 0 )
-			{
-				printf("\ntsh: Error Using fork in tsh.c\n");
-				cleanup_heap(argv1, argv2);
-				return;
-			}
-			else if( pid == 0 ) // child
-			{
-				sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
-				setpgid(0,0);
-
-				int pid1; int pid2; // create two children
-				pid1 = fork_func();
-				if( pid1 < 0 )
-				{
-					printf("\ntsh: Error Using fork in tsh.c\n");
-					cleanup_heap(argv1, argv2);
-					return;
-				}
-				else if( pid1 == 0 ) // child1
-				{
-					dup2(STDOUT_FILENO, pipe_fd[1]); 
-					// program1 STDOUT -> pipe_fd[1] (for writing)
-
-					execve(argv1[0], argv1, environ); // load and run program
-					exit(1);
-				}
-
-				pid2 = fork_func();
+				int pid2 = fork();
 				if( pid2 < 0 )
 				{
 					printf("\ntsh: Error Using fork in tsh.c\n");
-					cleanup_heap(argv1, argv2);
-					return;
 				}
-				else if( pid2 == 0 ) // child2
+				else if( pid2 == 0 ) // child shell
 				{
+					printf("\ntsh: Run Pipe Between %s and %s\n", argv1[0],
+								argv2[0]);
+					
+					// distinguish main shell process group pid from job process group pid
+					sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
+					setpgid(0, 0); // allow children of this child to have new pid
+	
 					dup2(STDIN_FILENO, pipe_fd[0]); 
 					// program2 STDIN -> pipe_fd[0] (for reading)
 
-					execve(argv2[0], argv2, environ); // load and run program
-					exit(1);
+					execve(argv2[0], argv2, environ); // load and run program		
 				}
-				
-				int status;
-				// wait for pid1 and pid2
-				waitpid(-1, &status, 0);
-				waitpid(-1, &status, 0);
-				exit(0);
 			}
-			else // main shell
+			
+			if( !bg ) // FG job 
 			{
-				printf("\ntsh: Run %s | %s\n", 
-  	     			 	  argv1[0], argv2[0]);
-
-				char* job_str = malloc(strlen(argv1[0]) + strlen(argv2[0]) +
-										  strlen(" | ") + 1);
-				strcpy(job_str, argv1[0]);
-				strcat(job_str, " | ");
-				strcat(job_str, argv2[0]);		
-	
-				if( !bg ) // FG job 
-				{
-					addjob(jobs, pid, FG, job_str);
-					sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
-					waitfg(pid); // Allow job to run in FG
-				}
-				else // BG job
-				{
-					addjob(jobs, pid, BG, job_str);
-					sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
-
-					int jid = pid2jid(pid);
-					printf("\ntsh: Job [%d] (%d) Running in Background\n", 
-							 jid, pid);
-				}
-				free(job_str);
-			}
-		}
-		else // no pipe or redirect
-		{
-			int pid;
-			if( (pid = fork()) < 0 )
-			{
-				printf("\ntsh: Error Using fork in tsh.c\n");
-				cleanup_heap(argv1, argv2);
-				return;
-			}
-			else if( pid == 0 ) // child
-			{
-				// Does the argv1[0] program exist?
-				if( access( argv1[0], F_OK ) == -1 ) 
-				{
-					printf("\ntsh: Error %s Does not Exist\n", argv1[0]);
-					exit(1);
-				}
-
-				// distinguish main shell process group pid from job process group pid
+				addjob(jobs, pid, FG, argv1[0]);
 				sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
-				setpgid(0, 0); // allow children of this child to have new pid
-				execve(argv1[0], argv1, environ); // load and run program	
-				exit(1); // should only reach if execve messed up
+				waitfg(pid); // Allow job to run in FG
 			}
-			else // pid > 0, parent
+			else // BG job
 			{
-				if( !bg ) // FG job 
-				{
-					addjob(jobs, pid, FG, argv1[0]);
-					sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
-					waitfg(pid); // Allow job to run in FG
-				}
-				else // BG job
-				{
-					addjob(jobs, pid, BG, argv1[0]);
-					sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
+				addjob(jobs, pid, BG, argv1[0]);
+				sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
 
-					int jid = pid2jid(pid);
-					printf("\ntsh: Job [%d] (%d) Running in Background\n", jid, pid);
-				}
+				int jid = pid2jid(pid);
+				printf("\ntsh: Job [%d] (%d) Running in Background\n", jid, pid);
 			}
 		}
 	}
-	
-	cleanup_heap(argv1, argv2);
+
+	// free heap
+	int i = 0;
+	char* tmp_ptr = argv1[i];
+	while(tmp_ptr != NULL)
+	{
+		free(argv1[i]);
+		i++;
+		tmp_ptr = argv1[i];
+	}
+
+	i = 0; tmp_ptr = argv2[i];
+	while(tmp_ptr != NULL)
+	{
+		free(argv2[i]);
+		i++;
+		tmp_ptr = argv2[i];
+	}
+
 	return;
 }
-
 
 /*
 * parseline - Parse the command line and build the argv array.

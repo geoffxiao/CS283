@@ -7,7 +7,7 @@ tsh : tsh.c
 
 Debug : tsh.c
 	gcc -g tsh.c -o tsh.o
-	valgrind --leak-check=yes ./tsh.o
+	valgrind --track-origins=yes --leak-check=yes ./tsh.o
 
 Clean:
 	rm -f tsh tsh.o
