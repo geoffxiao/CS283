@@ -296,6 +296,31 @@ int main(int argc, char **argv)
 }
 
 
+void pipe_sigchld_handler(int sig)
+{
+	while(waitpid(-1, NULL, WNOHANG) > 0)
+	{}
+}
+
+
+void main_shell_process(pid_t pid, char* job_str, int bg, sigset_t mask)
+{
+	if( !bg ) // FG job 
+	{
+		addjob(jobs, pid, FG, job_str);
+		sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
+		waitfg(pid); // Allow job to run in FG
+	}
+	else // BG job
+	{
+		addjob(jobs, pid, BG, job_str);
+		sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
+
+		int jid = pid2jid(pid);
+		printf("\ntsh: Job [%d] (%d) Running in Background\n", 
+				 jid, pid);
+	}
+}
 
 /*
 * eval - Evaluate the command line that the user has just typed in
@@ -464,8 +489,19 @@ void eval(char *cmdline)
 	if(!builtin) // not a builtin
 	{
 		sigset_t mask; // mask for signal blocking in the main shell
-		sigemptyset(&mask);
-		sigaddset(&mask, SIGCHLD);
+		if( sigemptyset(&mask) < 0 )
+		{
+			printf("\ntsh: Error Using sigemptyset in tsh.c (%s)\n",
+					strerror(errno));
+			cleanup_heap(argv1, argv2);
+			return;
+		}
+			{
+			printf("\ntsh: Error Using sigemptyset in tsh.c (%s)\n",
+					strerror(errno));
+			cleanup_heap(argv1, argv2);
+			return;
+		}	sigaddset(&mask, SIGCHLD);
 		sigaddset(&mask, SIGINT);
 		sigaddset(&mask, SIGTSTP);
 		sigprocmask(SIG_BLOCK, &mask, NULL);
@@ -501,20 +537,7 @@ void eval(char *cmdline)
 			}
 			else // pid > 0, parent
 			{
-				if( !bg ) // FG job 
-				{
-					addjob(jobs, pid, FG, argv1[0]);
-					sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
-					waitfg(pid); // Allow job to run in FG
-				}
-				else // BG job
-				{
-					addjob(jobs, pid, BG, argv1[0]);
-					sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
-
-					int jid = pid2jid(pid);
-					printf("\ntsh: Job [%d] (%d) Running in Background\n", jid, pid);
-				}
+				main_shell_process(pid, argv1[0], bg, mask);
 			}
 		}
 		else if( pipe_flag > 0 ) // pipe
@@ -536,6 +559,7 @@ void eval(char *cmdline)
 			}
 			else if( pid == 0 ) // child
 			{
+				signal(SIGCHLD, pipe_sigchld_handler);
 				sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals	
 				setpgid(0,0);
 
@@ -552,6 +576,13 @@ void eval(char *cmdline)
 					close(pipe_fd[0]); 
 					dup2(pipe_fd[1], STDOUT_FILENO); 
 					// program1 STDOUT -> pipe_fd[1] (for writing)
+
+					// Does the program exist?
+					if( access( argv1[0], F_OK ) == -1 ) 
+					{
+						printf("\ntsh: Error %s Does not Exist\n", argv1[0]);
+						exit(1);
+					}
 
 					execve(argv1[0], argv1, environ); // load and run program
 					exit(1);
@@ -570,14 +601,28 @@ void eval(char *cmdline)
 					dup2(pipe_fd[0], STDIN_FILENO); 
 					// program2 STDIN -> pipe_fd[0] (for reading)
 
+					// Does the program exist?
+					if( access( argv2[0], F_OK ) == -1 ) 
+					{
+						printf("\ntsh: Error %s Does not Exist\n", argv2[0]);
+						exit(1);
+					}
+
 					execve(argv2[0], argv2, environ); // load and run program
 					exit(1);
 				}
+			
+				// parent of pid1 and pid2	
 				
-				int status;
 				// wait for pid1 and pid2
-				waitpid(pid1, &status, 0);
-				waitpid(pid2, &status, 0);
+				while( waitpid(pid1, NULL, WNOHANG) == 0 )
+				{
+					sleep(0.1);
+				}
+				while( waitpid(pid2, NULL, WNOHANG) == 0 )	
+				{
+					sleep(0.1);
+				}
 				exit(0);
 			}
 			else // main shell
@@ -591,21 +636,7 @@ void eval(char *cmdline)
 				strcat(job_str, " | ");
 				strcat(job_str, argv2[0]);		
 	
-				if( !bg ) // FG job 
-				{
-					addjob(jobs, pid, FG, job_str);
-					sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
-					waitfg(pid); // Allow job to run in FG
-				}
-				else // BG job
-				{
-					addjob(jobs, pid, BG, job_str);
-					sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
-
-					int jid = pid2jid(pid);
-					printf("\ntsh: Job [%d] (%d) Running in Background\n", 
-							 jid, pid);
-				}
+				main_shell_process(pid, job_str, bg, mask);
 				free(job_str);
 			}
 		}
@@ -635,20 +666,7 @@ void eval(char *cmdline)
 			}
 			else // pid > 0, parent
 			{
-				if( !bg ) // FG job 
-				{
-					addjob(jobs, pid, FG, argv1[0]);
-					sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
-					waitfg(pid); // Allow job to run in FG
-				}
-				else // BG job
-				{
-					addjob(jobs, pid, BG, argv1[0]);
-					sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
-
-					int jid = pid2jid(pid);
-					printf("\ntsh: Job [%d] (%d) Running in Background\n", jid, pid);
-				}
+				main_shell_process(pid, argv1[0], bg, mask);			
 			}
 		}
 	}
