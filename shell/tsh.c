@@ -50,13 +50,14 @@ int nextjid = 1; /* next job ID to allocate */
 char sbuf[MAXLINE]; /* for composing sprintf messages */
 
 struct job_t
- { /* The job struct */
-  pid_t pid; /* job PID */
-  int jid; /* job ID [1, 2, ...] */
-  int state; /* UNDEF, BG, FG, or ST */
-  char cmdline[MAXLINE]; /* command line */
- }
-;
+{ 
+	/* The job struct */
+	pid_t pid; /* job PID */
+	int jid; /* job ID [1, 2, ...] */
+	int state; /* UNDEF, BG, FG, or ST */
+	char cmdline[MAXLINE]; /* command line */ 
+};
+
 struct job_t jobs[MAXJOBS]; /* The job list */
 /* End global variables */
 
@@ -148,88 +149,6 @@ int Kill(pid_t pid, int sig)
 	return 1;
 }
 
-
-/* End my helper functions */
-
-
-/*
-* main - The shell's main routine
-*/
-int main(int argc, char **argv)
- {
-  char c;
-  char cmdline[MAXLINE];
-  int emit_prompt = 1;
-  /* emit prompt (default) */
-
-  /* Redirect stderr to stdout (so that driver will get all output
-  * on the pipe connected to stdout) */
-  dup2(1, 2);
-
-  /* Parse the command line */
-  while ((c = getopt(argc, argv, "hvp")) != EOF)
-   {
-    switch (c)
-     {
-      case 'h': /* print help message */
-      usage();
-      break;
-      case 'v': /* emit additional diagnostic info */
-      verbose = 1;
-      break;
-      case 'p': /* don't print a prompt */
-      emit_prompt = 0;
-      /* handy for automatic testing */
-      break;
-      default:
-      usage();
-     }
-   }
-
-  /* Install the signal handlers */
-
-  /* These are the ones you will need to implement */
-  Signal(SIGINT, sigint_handler); /* ctrl-c */
-  Signal(SIGTSTP, sigtstp_handler); /* ctrl-z */
-  Signal(SIGCHLD, sigchld_handler); /* Terminated or stopped child */
-
-  /* This one provides a clean way to kill the shell */
-  Signal(SIGQUIT, sigquit_handler);
-
-  /* Initialize the job list */
-  initjobs(jobs);
-
-  /* Execute the shell's read/eval loop */
-  while (1)
-   {
-
-    /* Read command line */
-    if (emit_prompt)
-     {
-      printf("%s", prompt);
-      fflush(stdout);
-     }
-    if ((fgets(cmdline, MAXLINE, stdin) == NULL) && ferror(stdin))
-    app_error("fgets error");
-    if (feof(stdin))
-     {
-      /* End of file (ctrl-d) */
-      fflush(stdout);
-      exit(0);
-     }
-	 else
-	  {
-	 	/* evaluate the command line */
-	 	eval(cmdline); 
-	  }
-	 fflush(stdout);
-    fflush(stdout);
-   }
-
-  exit(0);
-  /* control never reaches here */
- }
-
 // Does array contain str?
 // null terminated array
 // return -1 if not in array
@@ -245,8 +164,9 @@ int contains_string(char** array, char* str)
 	return -1;
 }
 
+// Redirect stdin/stdout and run command
 void redirect_and_run(char** argv1, char** argv2, 
-							 char*redirect_type, int open_flag, int old_fd)
+							 char* redirect_type, int open_flag, int old_fd)
 {
 	int redirect_fd = open(argv2[0], open_flag,
 								  S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
@@ -289,6 +209,93 @@ void cleanup_heap(char** argv1, char** argv2)
 		tmp_ptr = argv2[i];
 	}
 }
+
+/* End my helper functions */
+
+
+/*
+* main - The shell's main routine
+*/
+int main(int argc, char **argv)
+{
+	char c;
+	char cmdline[MAXLINE];
+	int emit_prompt = 1;
+	/* emit prompt (default) */
+
+	/* Redirect stderr to stdout (so that driver will get all output
+	* on the pipe connected to stdout) */
+	dup2(1, 2);
+
+	/* Parse the command line */
+	while ((c = getopt(argc, argv, "hvp")) != EOF)
+	{
+		switch (c)
+		{
+			case 'h': /* print help message */
+				usage();
+				break;
+      
+			case 'v': /* emit additional diagnostic info */
+				verbose = 1;
+				break;
+      
+			case 'p': /* don't print a prompt */
+				emit_prompt = 0;
+				/* handy for automatic testing */
+				break;
+      
+			default:
+				usage();
+		}
+	}
+
+  
+	/* Install the signal handlers */
+
+	/* These are the ones you will need to implement */
+	Signal(SIGINT, sigint_handler); /* ctrl-c */
+	Signal(SIGTSTP, sigtstp_handler); /* ctrl-z */
+	Signal(SIGCHLD, sigchld_handler); /* Terminated or stopped child */
+
+	/* This one provides a clean way to kill the shell */
+	Signal(SIGQUIT, sigquit_handler);
+
+	/* Initialize the job list */
+	initjobs(jobs);
+
+	/* Execute the shell's read/eval loop */
+  	while (1)
+	{
+
+		/* Read command line */    
+		if (emit_prompt)
+		{
+			printf("%s", prompt);
+			fflush(stdout);
+		}
+    
+		if ((fgets(cmdline, MAXLINE, stdin) == NULL) && ferror(stdin))
+			app_error("fgets error");
+    
+		if (feof(stdin))
+		{
+			/* End of file (ctrl-d) */
+			fflush(stdout);
+			exit(0);
+		}
+			
+		/* evaluate the command line */
+		eval(cmdline); 
+		fflush(stdout);
+		fflush(stdout);
+	}
+
+	exit(0);
+	/* control never reaches here */
+}
+
+
 
 /*
 * eval - Evaluate the command line that the user has just typed in
@@ -529,7 +536,6 @@ void eval(char *cmdline)
 			}
 			else if( pid == 0 ) // child
 			{
-				sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
 				setpgid(0,0);
 
 				int pid1; int pid2; // create two children
