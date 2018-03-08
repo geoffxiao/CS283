@@ -20,8 +20,9 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include "csapp.h"
+
 /* Misc manifest constants */
-#define MAXLINE 1024 /* max line size */
 #define MAXARGS 128 /* max args on a command line */
 #define MAXJOBS 16 /* max jobs at any point in time */
 #define MAXJID 1<<16 /* max job ID */
@@ -89,16 +90,12 @@ int pid2jid(pid_t pid);
 void listjobs(struct job_t *jobs);
 
 void usage(void);
-void unix_error(char *msg);
 void app_error(char *msg);
 typedef void handler_t(int);
 handler_t *Signal(int signum, handler_t *handler);
 
 
 /* My own helper functions */
-
-// wrapper for sending a kill signal
-int Kill(pid_t pid, int sig);
 
 // wrapper for pipe function
 int pipe_func( int fd[2] );
@@ -142,35 +139,6 @@ int pipe_func( int fd[2] )
 	}
 }
 
-// Wrapper for fork system call
-int fork_func()
-{
-	int pid = fork();
-	if( pid < 0 )
-	{
-		printf("\ntsh: Error Using fork in tsh.c (%s)\n", strerror(errno));
-		return -1;
-	}
-	else
-	{
-		return pid;
-	}
-}
-
-
-// Error wrapper for kill
-// Return 0 and print error message if kill failed
-// Return 1 if OK
-int Kill(pid_t pid, int sig)
-{
-	if( kill(pid, sig) < 0)
-	{
-		printf("\ntsh: Error Using kill in tsh.c (%s)\n", strerror(errno));
-		return -1;
-	}
-	return 1;
-}
-
 // Does array contain str?
 // null terminated array
 // return -1 if not in array
@@ -190,23 +158,15 @@ int contains_string(char** array, char* str)
 void redirect_and_run(char** argv1, char** argv2, 
 							 char* redirect_type, int open_flag, int old_fd)
 {
-	int redirect_fd = open(argv2[0], open_flag,
+	int redirect_fd = Open(argv2[0], open_flag,
 								  S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
 	// create new file, default U=RW,G=RW,O=R
 
-	if(redirect_fd < 0)
-	{
-		printf("\ntsh: Error Opening %s\n", argv2[0]);
-		exit(1);
-	}              
-	else // open ok
-	{
-		// redirection
-		printf("\ntsh: Run %s and Redirect %s with %s\n",
- 	            argv1[0], redirect_type, argv2[0]);
-   	dup2(redirect_fd, old_fd); // old_fd -> redirect
-	}
-	execve(argv1[0], argv1, environ); // load and run program 
+	// redirection
+	printf("\ntsh: Run %s and Redirect %s with %s\n",
+ 	       argv1[0], redirect_type, argv2[0]);
+   Dup2(redirect_fd, old_fd); // old_fd -> redirect
+	Execve(argv1[0], argv1, environ); // load and run program 
 	exit(1); // should never reach unless execve error
 }
 
@@ -234,7 +194,7 @@ void cleanup_heap(char** argv1, char** argv2)
 
 void pipe_sigchld_handler(int sig)
 {
-	while(waitpid(-1, NULL, WNOHANG) > 0)
+	while(Waitpid(-1, NULL, WNOHANG) > 0)
 	{}
 }
 
@@ -293,7 +253,7 @@ int main(int argc, char **argv)
 
 	/* Redirect stderr to stdout (so that driver will get all output
 	* on the pipe connected to stdout) */
-	dup2(1, 2);
+	Dup2(1, 2);
 
 	/* Parse the command line */
 	while ((c = getopt(argc, argv, "hvp")) != EOF)
@@ -494,15 +454,15 @@ void eval(char *cmdline)
 	if(!builtin) // not a builtin
 	{
 		sigset_t mask; // mask for signal blocking in the main shell
-		sigemptyset(&mask);
-		sigaddset(&mask, SIGCHLD);
-		sigaddset(&mask, SIGINT);
-		sigaddset(&mask, SIGTSTP);
-		sigprocmask(SIG_BLOCK, &mask, NULL);
+		Sigemptyset(&mask);
+		Sigaddset(&mask, SIGCHLD);
+		Sigaddset(&mask, SIGINT);
+		Sigaddset(&mask, SIGTSTP);
+		Sigprocmask(SIG_BLOCK, &mask, NULL);
 
 		if( redirect_flag > 0 ) // redirection
 		{
-			int pid = fork_func();
+			int pid = Fork();
 			if( pid < 0 )
 			{
 				cleanup_heap(argv1, argv2);
@@ -523,8 +483,8 @@ void eval(char *cmdline)
 				}
 
 				// distinguish main shell process group pid from job process group pid
-				sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
-				setpgid(0, 0); // allow children of this child to have new pid
+				Sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
+				Setpgid(0, 0); // allow children of this child to have new pid
 				redirect_and_run(argv1, argv2, redirect_type, open_flag, old_fd); 
 				exit(1); // should reach only if execve messed up
 			}
@@ -543,7 +503,7 @@ void eval(char *cmdline)
 				return;
 			}
 
-			int pid = fork_func();
+			int pid = Fork();
 			if( pid < 0 )
 			{
 				printf("\ntsh: Error Using fork in tsh.c\n");
@@ -553,11 +513,11 @@ void eval(char *cmdline)
 			else if( pid == 0 ) // child
 			{
 				Signal(SIGCHLD, pipe_sigchld_handler);
-				sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals	
-				setpgid(0,0);
+				Sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals	
+				Setpgid(0,0);
 
 				int pid1; int pid2; // create two children
-				pid1 = fork_func();
+				pid1 = Fork();
 				if( pid1 < 0 )
 				{
 					cleanup_heap(argv1, argv2);
@@ -565,8 +525,8 @@ void eval(char *cmdline)
 				}
 				else if( pid1 == 0 ) // child1
 				{
-					close(pipe_fd[0]); 
-					dup2(pipe_fd[1], STDOUT_FILENO); 
+					Close(pipe_fd[0]); 
+					Dup2(pipe_fd[1], STDOUT_FILENO); 
 					// program1 STDOUT -> pipe_fd[1] (for writing)
 
 					// Does the program exist?
@@ -576,11 +536,11 @@ void eval(char *cmdline)
 						exit(1);
 					}
 
-					execve(argv1[0], argv1, environ); // load and run program
+					Execve(argv1[0], argv1, environ); // load and run program
 					exit(1);
 				}
 
-				pid2 = fork_func();
+				pid2 = Fork();
 				if( pid2 < 0 )
 				{
 					cleanup_heap(argv1, argv2);
@@ -588,8 +548,8 @@ void eval(char *cmdline)
 				}
 				else if( pid2 == 0 ) // child2
 				{
-					close(pipe_fd[1]);
-					dup2(pipe_fd[0], STDIN_FILENO); 
+					Close(pipe_fd[1]);
+					Dup2(pipe_fd[0], STDIN_FILENO); 
 					// program2 STDIN -> pipe_fd[0] (for reading)
 
 					// Does the program exist?
@@ -599,20 +559,20 @@ void eval(char *cmdline)
 						exit(1);
 					}
 
-					execve(argv2[0], argv2, environ); // load and run program
+					Execve(argv2[0], argv2, environ); // load and run program
 					exit(1);
 				}
 			
 				// parent of pid1 and pid2	
 				
 				// wait for pid1 and pid2
-				while( waitpid(pid1, NULL, WNOHANG) == 0 )
+				while( Waitpid(pid1, NULL, WNOHANG) == 0 )
 				{
-					sleep(0.1);
+					Sleep(1);
 				}
-				while( waitpid(pid2, NULL, WNOHANG) == 0 )	
+				while( Waitpid(pid2, NULL, WNOHANG) == 0 )	
 				{
-					sleep(0.1);
+					Sleep(1);
 				}
 				exit(0);
 			}
@@ -633,7 +593,7 @@ void eval(char *cmdline)
 		}
 		else // no pipe or redirect
 		{
-			int pid = fork_func();
+			int pid = Fork();
 			if( pid  < 0 )
 			{
 				cleanup_heap(argv1, argv2);
@@ -649,9 +609,9 @@ void eval(char *cmdline)
 				}
 
 				// distinguish main shell process group pid from job process group pid
-				sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
-				setpgid(0, 0); // allow children of this child to have new pid
-				execve(argv1[0], argv1, environ); // load and run program	
+				Sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
+				Setpgid(0, 0); // allow children of this child to have new pid
+				Execve(argv1[0], argv1, environ); // load and run program	
 				exit(1); // should only reach if execve messed up
 			}
 			else // pid > 0, parent
@@ -820,7 +780,7 @@ void do_bgfg(char **argv)
 		if( job->state == ST || job->state == BG )
 		{
 			// send SIGCONT to job_pid
-			if( Kill(-job_pid, SIGCONT) > 0 ) 
+			Kill(-job_pid, SIGCONT);
 			{
 				job->state = FG;
 				waitfg(job_pid); // allow FG job to run
@@ -840,10 +800,8 @@ void do_bgfg(char **argv)
 		if( job->state == ST )
 		{
 			// send SIGCONT to job_pid
-			if( Kill(-job_pid, SIGCONT) > 0 ) 
-			{
-				job->state = BG;
-			}
+			Kill(-job_pid, SIGCONT);
+			job->state = BG;
 		}
 		else // can only bg a job that is ST
 		{
@@ -873,7 +831,7 @@ void waitfg(pid_t pid)
 	// Keep sleeping while fg job is running
 	while( fgpid(jobs) == pid )
 	{
-		sleep(1); // put main shell to sleep	
+		Sleep(1); // put main shell to sleep	
 	}
 
 	return;
@@ -883,10 +841,10 @@ void waitfg(pid_t pid)
 	* Signal handlers
 	*****************/
 
-	/*
-	* sigchld_handler - The kernel sends a SIGCHLD to the shell whenever
-	*     a child job terminates (becomes a zombie), or stops because it
-	*     received a SIGSTOP or SIGTSTP signal. The handler reaps all
+/*
+* sigchld_handler - The kernel sends a SIGCHLD to the shell whenever
+*     a child job terminates (becomes a zombie), or stops because it
+*     received a SIGSTOP or SIGTSTP signal. The handler reaps all
 *     available zombie children, but doesn't wait for any other
 *     currently running children to terminate.
 */
@@ -902,7 +860,7 @@ void sigchld_handler(int sig)
 	// WUNTRACED = look for term/stopped chldren
 
 	// Use while loop to reap as many children as possible
-	while( (child_pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0 ) // See which tsch jobs term/stop
+	while( (child_pid = Waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0 ) // See which tsch jobs term/stop
 	{
 		struct job_t * child_job = getjobpid(jobs, child_pid); // Get job id for pid 
 
@@ -931,12 +889,6 @@ void sigchld_handler(int sig)
 		}	
 	}
 
-	// child_pid == -1, waitpid had error
-	if( errno == ECHILD ) // main shell has no children
-		// this is OK b/c it may be that no jobs run yet
-	{
-	}
-
 	return;
 }
 
@@ -960,12 +912,9 @@ void sigint_handler(int sig)
 	}
 	else
 	{	
-		if( Kill(-fg_pid, SIGINT) > 0 ) // kill this job and all others in its process group
-		// successfully sent signal
-		{
-			if( verbose )
-				printf("\ntsh: Job [%d] (%d) Terminated by Ctrl+C\n", fg_job->jid, fg_pid);
-		}
+		Kill(-fg_pid, SIGINT); // kill this job and all others in its process group
+		if( verbose )
+			printf("\ntsh: Job [%d] (%d) Terminated by Ctrl+C\n", fg_job->jid, fg_pid);
 	}
 }
 
@@ -989,13 +938,10 @@ void sigtstp_handler(int sig)
 	}
 	else
 	{
-		if( Kill(-fg_pid, SIGTSTP) > 0 ) // send signal to stop job
-		// successfully sent signal
-		{
-			if( verbose )
-				printf("\ntsh: Job [%d] (%d) Stopped by Ctrl+Z\n", fg_job->jid, fg_job->pid);
-			fg_job->state = ST;
-		}
+		Kill(-fg_pid, SIGTSTP); // send signal to stop job
+		if( verbose )
+			printf("\ntsh: Job [%d] (%d) Stopped by Ctrl+Z\n", fg_job->jid, fg_job->pid);
+		fg_job->state = ST;
 	}
 }
 
@@ -1200,41 +1146,6 @@ void usage(void)
  	printf(" -v print additional diagnostic information\n");
  	printf(" -p do not emit a command prompt\n");
  	exit(1); 
-}
-
-/*
-* unix_error - unix-style error routine
-*/
-void unix_error(char *msg)
-{
-  	fprintf(stdout, "%s: %s\n", msg, strerror(errno));
-  	exit(1);
-}
-
-/*
-* app_error - application-style error routine
-*/
-void app_error(char *msg)
-{
- 	fprintf(stdout, "%s\n", msg);
-  	exit(1);
-}
-
-/*
-* Signal - wrapper for the sigaction function
-*/
-handler_t *Signal(int signum, handler_t *handler)
-{
-	struct sigaction action, old_action;
-
-	action.sa_handler = handler;
-	sigemptyset(&action.sa_mask);   /* block sigs of type being handled */
-	action.sa_flags = SA_RESTART;   /* restart syscalls if possible */
-
-	if (sigaction(signum, &action, &old_action) < 0)
-		unix_error("Signal error");
-
-	return (old_action.sa_handler);
 }
 
 /*
