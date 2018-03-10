@@ -130,7 +130,7 @@ int pipe_func( int fd[2] )
 {
 	if( pipe(fd) < 0 )
 	{
-		printf("tsh: Error Using pipe in tsh.c\n");
+		printf("\ntsh: Error Using pipe in tsh.c\n");
 		return -1;
 	}
 	else
@@ -163,9 +163,8 @@ void redirect_and_run(char** argv1, char** argv2,
 	// create new file, default U=RW,G=RW,O=R
 
 	// redirection
-	if(verbose)
-		printf("tsh: Run %s and Redirect %s with %s\n",
- 	   		argv1[0], redirect_type, argv2[0]);
+	printf("\ntsh: Run %s and Redirect %s with %s\n",
+ 	       argv1[0], redirect_type, argv2[0]);
    Dup2(redirect_fd, old_fd); // old_fd -> redirect
 	Execve(argv1[0], argv1, environ); // load and run program 
 	exit(1); // should never reach unless execve error
@@ -214,9 +213,8 @@ void main_shell_process(pid_t pid, char* job_str, int bg, sigset_t mask)
 		sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
 
 		int jid = pid2jid(pid);
-		if(verbose)
-			printf("tsh: Job [%d] (%d) Running in Background\n", 
-					jid, pid);
+		printf("\ntsh: Job [%d] (%d) Running in Background\n", 
+				 jid, pid);
 	}
 }
 
@@ -326,6 +324,17 @@ int main(int argc, char **argv)
 }
 
 
+int pipe_pid;
+
+void pipe_sigusr1_handler(int sig)
+{
+	pipe_pid = 1;
+}
+
+void pipe_sigusr2_handler(int sig)
+{
+	pipe_pid = 2;
+}
 /*
 * eval - Evaluate the command line that the user has just typed in
 *
@@ -469,13 +478,13 @@ void eval(char *cmdline)
 			{
 				if( argv2[0] == NULL )
 				{
-					printf("tsh: No Redirection File Provided\n");
+					printf("\ntsh: No Redirection File Provided\n");
 					exit(1);
 				}
 
 				if( access( argv1[0], F_OK ) == -1 ) 
 				{
-					printf("tsh: Error %s Does not Exist\n", argv1[0]);
+					printf("\ntsh: Error %s Does not Exist\n", argv1[0]);
 					exit(1);
 				}
 
@@ -490,436 +499,424 @@ void eval(char *cmdline)
 				main_shell_process(pid, argv1[0], bg, mask);
 			}
 		}
-		else if( pipe_flag > 0 ) // pipe
-		{
-			int pid = Fork();
-			if( pid == 0 ) // child that runs the two processes in the pipe
+			else if( pipe_flag > 0 ) // pipe
 			{
-				// Create file descriptors for pipe
 				int pipe_fd[2];
 				if( pipe_func(pipe_fd) < 0 )
 				{
-					printf("tsh: Error Using pipe in tsh.c (%s)\n",
-							strerror(errno));
+					printf("\ntsh: Error Using pipe in tsh.c\n");
 					cleanup_heap(argv1, argv2);
 					return;
 				}
-				
-				// We don't want the old sigchld_handler to reap the pipe
-				// children
-				Signal(SIGCHLD, pipe_sigchld_handler);
-				
-				Sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals	
-				Setpgid(0, 0); // distinguish job processes from main shell
 
-				int pid1; int pid2; // create two children
-				pid1 = Fork();
-				if( pid1 == 0 ) // child1 runs program1
+				Signal(SIGUSR1, pipe_sigusr1_handler);
+				Signal(SIGUSR2, pipe_sigusr2_handler);
+
+					int pid1 = -1; int pid2 = -1; // create two children
+					pid1 = Fork();
+					if( pid1 == 0 ) // child1
+					{
+						Signal(SIGCHLD, pipe_sigchld_handler);
+						Sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals	
+							Setpgid(0, pid1);
+						
+						Close(pipe_fd[0]); 
+						Dup2(pipe_fd[1], STDOUT_FILENO); 
+						// program1 STDOUT -> pipe_fd[1] (for writing)
+
+						// Does the program exist?
+						if( access( argv1[0], F_OK ) == -1 ) 
+						{
+							printf("\ntsh: Error %s Does not Exist\n", argv1[0]);
+							exit(1);
+						}
+
+						Execve(argv1[0], argv1, environ); // load and run program
+						exit(1);
+					}
+
+					pid2 = Fork();
+					if( pid2 == 0 ) // child2
+					{
+						Signal(SIGCHLD, pipe_sigchld_handler);
+						Sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals	
+						
+						Setpgid(0, pid1);
+						Close(pipe_fd[1]);
+						Dup2(pipe_fd[0], STDIN_FILENO); 
+						// program2 STDIN -> pipe_fd[0] (for reading)
+
+						// Does the program exist?
+						if( access( argv2[0], F_OK ) == -1 ) 
+						{
+							printf("\ntsh: Error %s Does not Exist\n", argv2[0]);
+							exit(1);
+						}
+
+						Execve(argv2[0], argv2, environ); // load and run program
+						exit(1);
+					}
+				
+					printf("\ntsh: Run %s | %s\n", 
+							  argv1[0], argv2[0]);
+
+					char* job_str = malloc(strlen(argv1[0]) + strlen(argv2[0]) +
+											  strlen(" | ") + 1);
+					strcpy(job_str, argv1[0]);
+					strcat(job_str, " | ");
+					strcat(job_str, argv2[0]);		
+
+		if( !bg ) // FG job 
+		{
+			{
+				sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
+				addjob(jobs, pid1, FG, job_str);
+				waitfg(pid1); // Allow job to run in FG
+			}
+		}
+		else // BG job
+		{	
+			if( pid1 == -1 )
+			{
+				addjob(jobs, pid2, FG, job_str);
+				sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
+
+				int jid = pid2jid(pid1);
+				printf("\ntsh: Job [%d] (%d) Running in Background\n", 
+					 jid, pid1);
+			}
+			else
+			{	
+				addjob(jobs, pid1, FG, job_str);
+				sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
+
+				int jid = pid2jid(pid1);
+				printf("\ntsh: Job [%d] (%d) Running in Background\n", 
+					 jid, pid1);
+			}
+		}
+
+					free(job_str);
+			}
+			else // no pipe or redirect
+			{
+				int pid = Fork();
+				if( pid == 0 ) // child
 				{
-					Setpgid(0, getppid()); // set to same process group as parent
-
-					Close(pipe_fd[0]);  // don't need
-					Dup2(pipe_fd[1], STDOUT_FILENO); // program1 STDOUT -> pipe_fd[1] (for writing)
-
-					// Does the program exist?
+					// Does the argv1[0] program exist?
 					if( access( argv1[0], F_OK ) == -1 ) 
 					{
-						printf("tsh: Error %s Does not Exist\n", argv1[0]);
+						printf("\ntsh: Error %s Does not Exist\n", argv1[0]);
 						exit(1);
 					}
 
-					Execve(argv1[0], argv1, environ); // load and run program
-					exit(1);
+					// distinguish main shell process group pid from job process group pid
+					Sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
+					Setpgid(0, 0); // allow children of this child to have new pid
+					Execve(argv1[0], argv1, environ); // load and run program	
+					exit(1); // should only reach if execve messed up
 				}
-
-				pid2 = Fork();
-				if( pid2 == 0 ) // child2 runs program2
-				{ 
-					Setpgid(0, getppid()); // set same process group as parent
-
-					Close(pipe_fd[1]); // don't need
-					Dup2(pipe_fd[0], STDIN_FILENO); // program2 STDIN -> pipe_fd[0] (for reading)
-
-					// Does the program exist?
-					if( access( argv2[0], F_OK ) == -1 ) 
-					{
-						printf("tsh: Error %s Does not Exist\n", argv2[0]);
-						exit(1);
-					}
-
-					Execve(argv2[0], argv2, environ); // load and run program
-					exit(1);
-				}
-			
-				// parent of pid1 and pid2	
-				
-				// wait for pid1 and pid2
-				while( waitpid(pid1, NULL, WNOHANG) == 0 )
+				else // pid > 0, parent
 				{
-					Sleep(1);
+					main_shell_process(pid, argv1[0], bg, mask);			
 				}
-				while( waitpid(pid2, NULL, WNOHANG) == 0 )	
-				{
-					Sleep(1);
-				}
-				exit(0);
-			}
-			else // main shell
-			{
-				if(verbose)
-					printf("tsh: Run %s | %s\n", 
-  	     					argv1[0], argv2[0]);
-
-				char* job_str = malloc(strlen(argv1[0]) + strlen(argv2[0]) +
-										  strlen(" | ") + 1);
-				strcpy(job_str, argv1[0]);
-				strcat(job_str, " | ");
-				strcat(job_str, argv2[0]);		
-	
-				main_shell_process(pid, job_str, bg, mask);
-				free(job_str);
 			}
 		}
-		else // no pipe or redirect
-		{
-			int pid = Fork();
-			if( pid == 0 ) // child
-			{
-				// Does the argv1[0] program exist?
-				if( access( argv1[0], F_OK ) == -1 ) 
-				{
-					printf("tsh: Error %s Does not Exist\n", argv1[0]);
-					exit(1);
-				}
-
-				// distinguish main shell process group pid from job process group pid
-				Sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
-				Setpgid(0, 0); // allow children of this child to have new pid
-				Execve(argv1[0], argv1, environ); // load and run program	
-				exit(1); // should only reach if execve messed up
-			}
-			else // pid > 0, parent
-			{
-				main_shell_process(pid, argv1[0], bg, mask);			
-			}
-		}
+		
+		cleanup_heap(argv1, argv2);
+		return;
 	}
-	
-	cleanup_heap(argv1, argv2);
-	return;
-}
 
 
-/*
-* parseline - Parse the command line and build the argv array.
-*
-* Characters enclosed in single quotes are treated as a single
-* argument.  Return true if the user has requested a BG job, false if
-* the user has requested a FG job.
-*/
-int parseline(const char *cmdline, char **argv)
-{
-	static char array[MAXLINE]; /* holds local copy of command line */
-	char *buf = array; /* ptr that traverses command line */
-	char *delim; /* points to first space delimiter */
-	int argc; /* number of args */
-	int bg; /* background job? */
-  
-	strcpy(buf, cmdline);
-	buf[strlen(buf)-1] = ' '; /* replace trailing '\n' with space */
-	while (*buf && (*buf == ' ')) /* ignore leading spaces */
-		buf++;
-
-  
-	/* Build the argv list */
-	argc = 0;
-	if (*buf == '\'')
-  	{
-	  	buf++;
-		delim = strchr(buf, '\'');
-	}
- 	else
+	/*
+	* parseline - Parse the command line and build the argv array.
+	*
+	* Characters enclosed in single quotes are treated as a single
+	* argument.  Return true if the user has requested a BG job, false if
+	* the user has requested a FG job.
+	*/
+	int parseline(const char *cmdline, char **argv)
 	{
-  		delim = strchr(buf, ' ');
- 	}
-
- 	while (delim)
-	{
-  		argv[argc++] = buf;
-		*delim = '\0';
-	 	buf = delim + 1;
-	  	while (*buf && (*buf == ' ')) /* ignore spaces */
+		static char array[MAXLINE]; /* holds local copy of command line */
+		char *buf = array; /* ptr that traverses command line */
+		char *delim; /* points to first space delimiter */
+		int argc; /* number of args */
+		int bg; /* background job? */
+	  
+		strcpy(buf, cmdline);
+		buf[strlen(buf)-1] = ' '; /* replace trailing '\n' with space */
+		while (*buf && (*buf == ' ')) /* ignore leading spaces */
 			buf++;
 
+	  
+		/* Build the argv list */
+		argc = 0;
 		if (*buf == '\'')
 		{
-		  	buf++;
-		  	delim = strchr(buf, '\'');
+			buf++;
+			delim = strchr(buf, '\'');
 		}
 		else
 		{
-		  	delim = strchr(buf, ' ');
+			delim = strchr(buf, ' ');
 		}
-	}
-	argv[argc] = NULL;
-  
-	if (argc == 0) /* ignore blank line */
-		return 1;
-  
-	/* should the job run in the background? */
-	if ((bg = (*argv[argc-1] == '&')) != 0)
-	{
-		argv[--argc] = NULL;
-	}
-	return bg; 
-}
 
-/*
-* builtin_cmd - If the user has typed a built-in command then execute
-*    it immediately.
-*
-* return 1 if builtin command
-* Supported builtins = quit, jobs, bg, fg
-*/
-int builtin_cmd(char **argv)
-{
-	char* cmd = argv[0];
+		while (delim)
+		{
+			argv[argc++] = buf;
+			*delim = '\0';
+			buf = delim + 1;
+			while (*buf && (*buf == ' ')) /* ignore spaces */
+				buf++;
 
-	if( !strcmp(cmd, "quit") )
-	{
-		exit(0); // quit command
+			if (*buf == '\'')
+			{
+				buf++;
+				delim = strchr(buf, '\'');
+			}
+			else
+			{
+				delim = strchr(buf, ' ');
+			}
+		}
+		argv[argc] = NULL;
+	  
+		if (argc == 0) /* ignore blank line */
+			return 1;
+	  
+		/* should the job run in the background? */
+		if ((bg = (*argv[argc-1] == '&')) != 0)
+		{
+			argv[--argc] = NULL;
+		}
+		return bg; 
 	}
-	else if( !strcmp(cmd, "&") )
+
+	/*
+	* builtin_cmd - If the user has typed a built-in command then execute
+	*    it immediately.
+	*
+	* return 1 if builtin command
+	* Supported builtins = quit, jobs, bg, fg
+	*/
+	int builtin_cmd(char **argv)
 	{
-		return 0; // ignore singleton & command
+		char* cmd = argv[0];
+
+		if( !strcmp(cmd, "quit") )
+		{
+			exit(0); // quit command
+		}
+		else if( !strcmp(cmd, "&") )
+		{
+			return 0; // ignore singleton & command
+		}
+		else if( !strcmp(cmd, "jobs") )
+		{
+			listjobs(jobs); // print jobs
+			printf("\n");
+			return 1;
+		}
+		else if( !strcmp(cmd, "bg") || !strcmp(cmd, "fg") )
+		{
+			do_bgfg(argv);
+			return 1;
+		}
+		else
+		{
+			return 0;
+		}
+		/* not a builtin command */
 	}
-	else if( !strcmp(cmd, "jobs") )
+
+
+	/*
+	* do_bgfg - Execute the builtin bg and fg commands
+	*/
+	void do_bgfg(char **argv)
 	{
-		listjobs(jobs); // print jobs
-		return 1;
+		if( argv[1] == NULL ) // no second argument in fg or bg
+		{
+			printf("\ntsh: %s Needs an Argument\n", argv[0]);
+			return;
+		}
+
+		// the argument after bg or fg
+		char* bgfg_arg = malloc( strlen(argv[1]) + 1 ); // Extract arg after 'bg' or 'fg'
+		strcpy(bgfg_arg, argv[1]);
+
+		int job_id; 
+		struct job_t * job; 
+		pid_t job_pid;
+
+		if( bgfg_arg[0] == '%' ) // fg %#, referencing job ID
+		{
+			// which job to fg?
+			job_id = atoi( &bgfg_arg[1] );
+			job = getjobjid(jobs, job_id);
+			if( job == NULL )
+			{
+				printf("tsh: Job ID %d Does Not Exist\n", job_id);
+				return;
+			}
+			job_pid = job->pid;
+		}
+		else // fg #, # is the PID
+		{
+			// What job are we trying to operate on?
+			job_pid = (pid_t) atoi( bgfg_arg ); // convert to pid
+			job_id = pid2jid(job_pid);
+			job = getjobjid(jobs, job_id);
+			// The job we are trying to bg or fg does not exist
+			if( job == NULL )
+			{
+				printf("\ntsh: PID %d Does Not Exist\n", job_pid);
+				return;
+			}
+		}
+
+		// fg, switch background/suspended job to foreground
+		if( !strcmp(argv[0], "fg") )
+		{
+			// check job state if ST? or BG?
+			if( job->state == ST || job->state == BG )
+			{
+				// send SIGCONT to job_pid
+				Kill(-job_pid, SIGCONT);
+				{
+					job->state = FG;
+					waitfg(job_pid); // allow FG job to run
+				}
+			}
+			else // can't fg a job already in FG
+			{
+				printf("tsh: Job [%d] (%d) is Already in Foreground\n",
+						job->jid, job_pid);
+			}
+		}
+
+		// bg, restart a suspended job in background
+		else if( !strcmp(argv[0], "bg") )
+		{
+			// check job state if ST?
+			if( job->state == ST )
+			{
+				// send SIGCONT to job_pid
+				Kill(-job_pid, SIGCONT);
+				job->state = BG;
+			}
+			else // can only bg a job that is ST
+			{
+				printf("\ntsh: Job [%d] (%d) is Not Stopped\n",
+						job->jid, job_pid);
+			}
+		}
+
+		free(bgfg_arg);
+		return;
 	}
-	else if( !strcmp(cmd, "bg") || !strcmp(cmd, "fg") )
+
+	/*
+	* waitfg - Block until process pid is no longer the foreground process
+	*/
+
+	// called by the main shell
+	void waitfg(pid_t pid)
 	{
-		do_bgfg(argv);
-		return 1;
+		struct job_t * fg_job = getjobpid(jobs, pid);
+		
+		// once FG job finishes, SIGCHLD sent to parent, main shell
+		// Block SIGTERM, SIGINT signals to main shell, we want these signals to
+		// go to FG job instead
+		// To block these signals, simply put main shell to sleep
+
+		// Keep sleeping while fg job is running
+		while( fgpid(jobs) == pid )
+		{
+			Sleep(1); // put main shell to sleep	
+		}
+
+		return;
+	}
+
+	/*****************
+		* Signal handlers
+		*****************/
+
+	/*
+	* sigchld_handler - The kernel sends a SIGCHLD to the shell whenever
+	*     a child job terminates (becomes a zombie), or stops because it
+	*     received a SIGSTOP or SIGTSTP signal. The handler reaps all
+	*     available zombie children, but doesn't wait for any other
+	*     currently running children to terminate.
+	*/
+
+	// A child (a tsch job) finished
+	void sigchld_handler(int sig)
+	{
+		pid_t child_pid;
+		int status;
+
+		// reap zombie children of main tsh shell process
+		// WNOHANG = don't wait for children running to terminate/stop
+		// WUNTRACED = look for term/stopped chldren
+
+		// Use while loop to reap as many children as possible
+		while( (child_pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0 ) // See which tsch jobs term/stop
+		{
+			struct job_t * child_job = getjobpid(jobs, child_pid); // Get job id for pid 
+
+			if( verbose )
+			{
+				printf("\ntsh: sigchld_handler Entered by PID %d\n", getpid());
+			}
+
+			if( WIFEXITED(status) ) // tsh job exited normally
+			{
+				printf("\ntsh: Job [%d] (%d) Exited Normally Signal %d\n", child_job->jid,
+						child_job->pid, WTERMSIG(status));
+				deletejob(jobs, child_pid); // delete tsh job
+			}
+			else if( WIFSIGNALED(status) ) // tsh job term b/c unhandled error
+			{
+				printf("\ntsh: Job [%d] (%d) Terminated by Signal %d\n",
+						child_job->jid, child_job->pid, WTERMSIG(status));
+				deletejob(jobs, child_pid);
+			}
+			else if( WIFSTOPPED(status) ) // tsh job stopped
+			{
+				printf("\ntsh: Job [%d] (%d) Stopped by Signal %d\n", child_job->jid,
+						child_job->pid, WSTOPSIG(status));
+				child_job->state = ST; // update jobs array
+			}	
+		}
+
+		return;
+	}
+
+	/*
+	* sigint_handler - The kernel sends a SIGINT to the shell whenver the
+	*    user types ctrl-c at the keyboard.  Catch it and send it along
+	*    to the foreground job.
+	*/
+
+	// ctrl+c in tsh
+	// Need to terminate current fg job in tsh
+	void sigint_handler(int sig)
+	{
+		pid_t fg_pid = fgpid(jobs); // current foreground job
+		struct job_t * fg_job = getjobpid(jobs, fg_pid);
+
+		if( fg_pid == 0 ) // No current jobs
+		{
+		printf("\ntsh: No Foreground Jobs\n");
+		return;
 	}
 	else
-	{
-		return 0;
-	}
-	/* not a builtin command */
-}
-
-
-/*
-* do_bgfg - Execute the builtin bg and fg commands
-*/
-void do_bgfg(char **argv)
-{
-	if( argv[1] == NULL ) // no second argument in fg or bg
-	{
-		printf("tsh: %s Needs an Argument\n", argv[0]);
-		return;
-	}
-
-	// the argument after bg or fg
-	char* bgfg_arg = malloc( strlen(argv[1]) + 1 ); // Extract arg after 'bg' or 'fg'
-	strcpy(bgfg_arg, argv[1]);
-
-	int job_id; 
-	struct job_t * job; 
-	pid_t job_pid;
-
-	if( bgfg_arg[0] == '%' ) // fg %#, referencing job ID
-	{
-		// which job to fg?
-		job_id = atoi( &bgfg_arg[1] );
-		job = getjobjid(jobs, job_id);
-		if( job == NULL )
-		{
-			printf("tsh: Job ID %d Does Not Exist\n", job_id);
-			return;
-		}
-		job_pid = job->pid;
-	}
-	else // fg #, # is the PID
-	{
-		// What job are we trying to operate on?
-		job_pid = (pid_t) atoi( bgfg_arg ); // convert to pid
-		job_id = pid2jid(job_pid);
-		job = getjobjid(jobs, job_id);
-		// The job we are trying to bg or fg does not exist
-		if( job == NULL )
-		{
-				printf("tsh: PID %d Does Not Exist\n", job_pid);
-			return;
-		}
-	}
-
-	// fg, switch background/suspended job to foreground
-	if( !strcmp(argv[0], "fg") )
-	{
-		// check job state if ST? or BG?
-		if( job->state == ST || job->state == BG )
-		{
-			job->state = FG; // set state
-			Kill(-job_pid, SIGCONT); // send SIGCONT
-			waitfg(job_pid); // allow FG job to run
-		}
-		else // can't fg a job already in FG
-		{
-			printf("tsh: Job [%d] (%d) is Already in Foreground\n",
-					job->jid, job_pid);
-		}
-	}
-
-	// bg, restart a suspended job in background
-	else if( !strcmp(argv[0], "bg") )
-	{
-		// check job state if ST?
-		if( job->state == ST )
-		{
-			job->state = BG; // set state
-			Kill(-job_pid, SIGCONT); // send SIGCONT
-			printf("[%d] (%d) %s\n", job->jid, job_pid, job->cmdline);
-		}
-		else // can only bg a job that is ST
-		{
-			printf("tsh: Job [%d] (%d) is Not Stopped\n",
-					job->jid, job_pid);
-		}
-	}
-
-	free(bgfg_arg);
-	return;
-}
-
-/*
-* waitfg - Block until process pid is no longer the foreground process
-*/
-
-// called by the main shell
-void waitfg(pid_t pid)
-{
-	struct job_t * fg_job = getjobpid(jobs, pid);
-	
-	// once FG job finishes, SIGCHLD sent to parent, main shell
-	// Block SIGTERM, SIGINT signals to main shell, we want these signals to
-	// go to FG job instead
-	// To block these signals, simply put main shell to sleep
-
-	// Keep sleeping while fg job is running
-	while( fgpid(jobs) == pid )
-	{
-		Sleep(1); // put main shell to sleep	
-	}
-
-	if(verbose)
-	{
-		printf("tsh: Process (%d) No Longer the FG Process\n", pid);
-	}
-	return;
-}
-
-/*****************
-	* Signal handlers
-	*****************/
-
-/*
-* sigchld_handler - The kernel sends a SIGCHLD to the shell whenever
-*     a child job terminates (becomes a zombie), or stops because it
-*     received a SIGSTOP or SIGTSTP signal. The handler reaps all
-*     available zombie children, but doesn't wait for any other
-*     currently running children to terminate.
-*/
-
-// A child (a tsch job) finished
-void sigchld_handler(int sig)
-{		
-	if( verbose )
-	{
-		printf("tsh: sigchld_handler Entered by PID %d\n", getpid());
-	}
-
-	pid_t child_pid;
-	int status;
-
-	// reap zombie children of main tsh shell process
-	// WNOHANG = don't wait for children running to terminate/stop
-	// WUNTRACED = look for term/stopped chldren
-
-	// Use while loop to reap as many children as possible
-	while( (child_pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0 ) // See which tsch jobs term/stop
-	{
-		struct job_t * child_job = getjobpid(jobs, child_pid); // Get job id for pid 
-
-		if( WIFEXITED(status) ) // tsh job exited normally
-		{
-			if(verbose)
-			{
-				printf("tsh: Job [%d] (%d) Exited Normally Signal %d\n", child_job->jid,
-					child_job->pid, WTERMSIG(status));
-				printf("tsh: Job [%d] (%d) Deleted\n", child_job->jid,
-						child_job->pid);
-			}
-			deletejob(jobs, child_pid); // delete tsh job
-		}
-		else if( WIFSIGNALED(status) ) // tsh job term b/c unhandled error
-		{
-			printf("tsh: Job [%d] (%d) Terminated by Signal %d\n",
-					child_job->jid, child_job->pid, WTERMSIG(status));
-			if(verbose)
-				printf("tsh: Job [%d] (%d) Deleted\n", child_job->jid,
-						child_job->pid);
-			deletejob(jobs, child_pid);
-		}
-		else if( WIFSTOPPED(status) ) // tsh job stopped
-		{
-			printf("tsh: Job [%d] (%d) Stopped by Signal %d\n", child_job->jid,
-					child_job->pid, WSTOPSIG(status));
-			child_job->state = ST; // update jobs array
-			if(verbose)
-				printf("tsh: Job [%d] (%d) State Set to ST\n", child_job->jid,
-						child_job->pid);
-		}	
-	}
-
-	if( verbose )
-	{
-			printf("tsh: sigchld_handler Exited by PID %d\n", getpid());
-	}
-	return;
-}
-
-/*
-* sigint_handler - The kernel sends a SIGINT to the shell whenver the
-*    user types ctrl-c at the keyboard.  Catch it and send it along
-*    to the foreground job.
-*/
-
-// ctrl+c in tsh
-// Need to terminate current fg job in tsh
-void sigint_handler(int sig)
-{
-	pid_t fg_pid = fgpid(jobs); // current foreground job
-	struct job_t * fg_job = getjobpid(jobs, fg_pid);
-
-	if(verbose)
-		printf("tsh: sigint_handler Entered by Job [%d] (%d)\n", fg_job->jid,
-				fg_pid);
-
-	if( fg_pid == 0 ) // No current jobs
-	{
-		printf("tsh: No Foreground Jobs\n");
-		return;
-	}
-	
-	Kill(-fg_pid, sig); // kill this job and all others in its process group
-	if( verbose )
-	{
-		printf("tsh: Job [%d] (%d) Terminated by Ctrl+C\n", fg_job->jid, fg_pid);	
-		printf("tsh: sigint_handler Exited by Job [%d] (%d)\n", fg_job->jid,
-				fg_pid);
+	{	
+		Kill(-fg_pid, SIGINT); // kill this job and all others in its process group
+		if( verbose )
+			printf("\ntsh: Job [%d] (%d) Terminated by Ctrl+C\n", fg_job->jid, fg_pid);
 	}
 }
 
@@ -932,26 +929,21 @@ void sigint_handler(int sig)
 // ctrl+z in tsch
 // Need to suspend the current fg tsch job
 void sigtstp_handler(int sig)
-{	
+{
 	pid_t fg_pid = fgpid(jobs); // current foreground job
 	struct job_t * fg_job = getjobpid(jobs, fg_pid);
 
-	if(verbose)
-		printf("tsh: sigtstp_handler Entered by Job [%d] (%d)\n", fg_job->jid,
-				fg_pid);
-
 	if( fg_pid == 0 )
 	{
-		printf("tsh: No Foreground Jobs\n");
+		printf("\ntsh: No Foreground Jobs\n");
 		return;
 	}
-	
-	Kill(-fg_pid, sig); // send signal to stop job
-	if( verbose )
+	else
 	{
-		printf("tsh: Job [%d] (%d) Stopped by Ctrl+Z\n", fg_job->jid, fg_job->pid);
-		printf("tsh: sigtstp_handler Exited by Job [%d] (%d)\n", fg_job->jid,
-				fg_pid);
+		Kill(-fg_pid, SIGTSTP); // send signal to stop job
+		if( verbose )
+			printf("\ntsh: Job [%d] (%d) Stopped by Ctrl+Z\n", fg_job->jid, fg_job->pid);
+		fg_job->state = ST;
 	}
 }
 
@@ -1015,13 +1007,13 @@ int addjob(struct job_t *jobs, pid_t pid, int state, char *cmdline)
 			strcpy(jobs[i].cmdline, cmdline);
 	  		if(verbose)
 			{
-				printf("tsh: Added job [%d] %d %s\n",
+				printf("\ntsh: Added job [%d] %d %s\n",
 					  	jobs[i].jid, jobs[i].pid, jobs[i].cmdline);
 			}
 			return 1;
 		}
 	}
- 	printf("tsh: Tried to create too many jobs\n");
+ 	printf("\ntsh: Tried to create too many jobs\n");
  	return 0;
 }
 

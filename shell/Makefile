@@ -1,4 +1,4 @@
-.Phony : All Clean
+.Phony : All Clean Debug
 
 All : tsh
 
