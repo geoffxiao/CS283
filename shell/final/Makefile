@@ -17,4 +17,4 @@ Test : myint.c mystop.c mysplit.c myspin.c hello.c
 	gcc hello.c -o hello
 
 Clean:
-	rm -f tsh tsh.o
+	rm -f tsh tsh.o myspin mysplit mystop myint hello
