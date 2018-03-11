@@ -149,7 +149,8 @@ int pipe_func( int fd[2] )
 int contains_string(char** array, char* str)
 {
 	char* tmp;
-	for(int i = 0; (tmp = array[i]) != NULL; i++)
+	int i;
+	for(i = 0; (tmp = array[i]) != NULL; i++)
 	{
 		if(strcmp(str, tmp) == 0)
 			return i;
