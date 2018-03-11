@@ -95,6 +95,7 @@ typedef void handler_t(int);
 handler_t *Signal(int signum, handler_t *handler);
 
 
+// --------------------------------------------------------------------------//
 /* My own helper functions */
 
 // wrapper for pipe function
@@ -118,6 +119,7 @@ void main_shell_process(pid_t pid, char* job_str, int bg, sigset_t mask);
 
 // parse arguments
 void parse_argv1_argv2(char** argv1, char** argv2, char** argv, int loc);
+// --------------------------------------------------------------------------//
 
 /* End function headers */
 
@@ -125,6 +127,7 @@ void parse_argv1_argv2(char** argv1, char** argv2, char** argv, int loc);
 
 /* My helper functions */
 
+// --------------------------------------------------------------------------//
 // wrapper for pipe system call
 int pipe_func( int fd[2] )
 {
@@ -171,7 +174,7 @@ void redirect_and_run(char** argv1, char** argv2,
 	exit(1); // should never reach unless execve error
 }
 
-
+// clean up null-terminated arrays argv1 and argv2
 void cleanup_heap(char** argv1, char** argv2)
 {
 	// free heap
@@ -193,33 +196,32 @@ void cleanup_heap(char** argv1, char** argv2)
 	}
 }
 
-void pipe_sigchld_handler(int sig)
-{
-	while(waitpid(-1, NULL, WNOHANG) > 0)
-	{}
-}
-
-
+// Add job PID which is runing command job_str
+// bg = run in background or foreground
+// mask = signal mask
 void main_shell_process(pid_t pid, char* job_str, int bg, sigset_t mask)
 {
 	if( !bg ) // FG job 
 	{
-		addjob(jobs, pid, FG, job_str);
+		addjob(jobs, pid, FG, job_str); // add job
 		sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
 		waitfg(pid); // Allow job to run in FG
 	}
 	else // BG job
 	{
-		addjob(jobs, pid, BG, job_str);
+		addjob(jobs, pid, BG, job_str); // add job
 		sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals
 
 		int jid = pid2jid(pid);
-		if(verbose)
-			printf("tsh: Job [%d] (%d) Running in Background\n", 
-					jid, pid);
+		printf("tsh: Job [%d] (%d) Running in Background\n", 
+				jid, pid);
 	}
 }
 
+// argv = full commandline parsed into array
+// argv1 = first part of commandline
+// argv2 = second part of commandline
+// If commandline is seperated by pipe (|) or redirect (>, <, >>)
 void parse_argv1_argv2(char** argv1, char** argv2, char** argv, int loc)
 {
 	// copy into argv1
@@ -239,6 +241,7 @@ void parse_argv1_argv2(char** argv1, char** argv2, char** argv, int loc)
 
 	return;
 }
+// --------------------------------------------------------------------------//
 
 /* End my helper functions */
 
@@ -435,6 +438,7 @@ void eval(char *cmdline)
 	// No redirection + No pipes
 	else
 	{
+		// copy into argv1
 		int c = 0;
 		char* tmp_ptr = argv[c];
 		while( tmp_ptr != NULL )
@@ -455,6 +459,7 @@ void eval(char *cmdline)
 
 	if(!builtin) // not a builtin
 	{
+		// Prevents race harzard between adding a job and the job ending
 		sigset_t mask; // mask for signal blocking in the main shell
 		Sigemptyset(&mask);
 		Sigaddset(&mask, SIGCHLD);
@@ -492,93 +497,70 @@ void eval(char *cmdline)
 		}
 		else if( pipe_flag > 0 ) // pipe
 		{
-			int pid = Fork();
-			if( pid == 0 ) // child that runs the two processes in the pipe
+			// Create file descriptors for pipe
+			int pipe_fd[2];
+			if( pipe_func(pipe_fd) < 0 )
 			{
-				// Create file descriptors for pipe
-				int pipe_fd[2];
-				if( pipe_func(pipe_fd) < 0 )
+				printf("tsh: Error Using pipe in tsh.c (%s)\n",
+						strerror(errno));
+				cleanup_heap(argv1, argv2);
+				return;
+			}
+				
+			int pid1; int pid2; // create two children
+			pid1 = Fork();
+			if( pid1 == 0 ) // child1 runs program1
+			{
+				// Does the program exist?
+				if( access( argv1[0], F_OK ) == -1 ) 
 				{
-					printf("tsh: Error Using pipe in tsh.c (%s)\n",
-							strerror(errno));
-					cleanup_heap(argv1, argv2);
-					return;
+					printf("tsh: Error %s Does not Exist\n", argv1[0]);
+					exit(1);
 				}
-				
-				// We don't want the old sigchld_handler to reap the pipe
-				// children
-				Signal(SIGCHLD, pipe_sigchld_handler);
-				
+
 				Sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals	
 				Setpgid(0, 0); // distinguish job processes from main shell
 
-				int pid1; int pid2; // create two children
-				pid1 = Fork();
-				if( pid1 == 0 ) // child1 runs program1
+				Close(pipe_fd[0]);  // don't need
+				Dup2(pipe_fd[1], STDOUT_FILENO); // program1 STDOUT -> pipe_fd[1] (for writing)
+						
+				Execve(argv1[0], argv1, environ); // load and run program
+				exit(1);
+			}
+
+			pid2 = Fork();
+			if( pid2 == 0 ) // child2 runs program2
+			{ 
+				// Does the program exist?
+				if( access( argv2[0], F_OK ) == -1 ) 
 				{
-					Setpgid(0, getppid()); // set to same process group as parent
-
-					Close(pipe_fd[0]);  // don't need
-					Dup2(pipe_fd[1], STDOUT_FILENO); // program1 STDOUT -> pipe_fd[1] (for writing)
-
-					// Does the program exist?
-					if( access( argv1[0], F_OK ) == -1 ) 
-					{
-						printf("tsh: Error %s Does not Exist\n", argv1[0]);
-						exit(1);
-					}
-
-					Execve(argv1[0], argv1, environ); // load and run program
+					printf("tsh: Error %s Does not Exist\n", argv2[0]);
 					exit(1);
 				}
 
-				pid2 = Fork();
-				if( pid2 == 0 ) // child2 runs program2
-				{ 
-					Setpgid(0, getppid()); // set same process group as parent
+				Sigprocmask(SIG_UNBLOCK, &mask, NULL); // unblock signals	
+				Setpgid(0, pid1); // distinguish job processes from main shell
 
-					Close(pipe_fd[1]); // don't need
-					Dup2(pipe_fd[0], STDIN_FILENO); // program2 STDIN -> pipe_fd[0] (for reading)
-
-					// Does the program exist?
-					if( access( argv2[0], F_OK ) == -1 ) 
-					{
-						printf("tsh: Error %s Does not Exist\n", argv2[0]);
-						exit(1);
-					}
-
-					Execve(argv2[0], argv2, environ); // load and run program
-					exit(1);
-				}
+				Close(pipe_fd[1]); // don't need
+				Dup2(pipe_fd[0], STDIN_FILENO); // program2 STDIN -> pipe_fd[0] (for reading)
 			
-				// parent of pid1 and pid2	
-				
-				// wait for pid1 and pid2
-				while( waitpid(pid1, NULL, WNOHANG) == 0 )
-				{
-					Sleep(1);
-				}
-				while( waitpid(pid2, NULL, WNOHANG) == 0 )	
-				{
-					Sleep(1);
-				}
-				exit(0);
+				Execve(argv2[0], argv2, environ); // load and run program
+				exit(1);
 			}
-			else // main shell
-			{
-				if(verbose)
-					printf("tsh: Run %s | %s\n", 
-  	     					argv1[0], argv2[0]);
-
-				char* job_str = malloc(strlen(argv1[0]) + strlen(argv2[0]) +
-										  strlen(" | ") + 1);
-				strcpy(job_str, argv1[0]);
-				strcat(job_str, " | ");
-				strcat(job_str, argv2[0]);		
+			
 	
-				main_shell_process(pid, job_str, bg, mask);
-				free(job_str);
-			}
+			// main shell	
+			if(verbose)
+				printf("tsh: Run %s | %s\n", argv1[0], argv2[0]);
+
+			char* job_str = malloc(strlen(argv1[0]) + strlen(argv2[0]) +
+					strlen(" | ") + 1);
+			strcpy(job_str, argv1[0]);
+			strcat(job_str, " | ");
+			strcat(job_str, argv2[0]);		
+	
+			main_shell_process(pid1, job_str, bg, mask);
+			free(job_str);
 		}
 		else // no pipe or redirect
 		{
@@ -781,7 +763,8 @@ void do_bgfg(char **argv)
 		{
 			job->state = BG; // set state
 			Kill(-job_pid, SIGCONT); // send SIGCONT
-			printf("[%d] (%d) %s\n", job->jid, job_pid, job->cmdline);
+			printf("tsh: Running Job [%d] (%d) in Background\n", job->jid,
+					job_pid);
 		}
 		else // can only bg a job that is ST
 		{
@@ -853,6 +836,9 @@ void sigchld_handler(int sig)
 	{
 		struct job_t * child_job = getjobpid(jobs, child_pid); // Get job id for pid 
 
+		if( child_job == NULL )
+			return;
+
 		if( WIFEXITED(status) ) // tsh job exited normally
 		{
 			if(verbose)
@@ -886,7 +872,7 @@ void sigchld_handler(int sig)
 
 	if( verbose )
 	{
-			printf("tsh: sigchld_handler Exited by PID %d\n", getpid());
+		printf("tsh: sigchld_handler Exited by PID %d\n", getpid());
 	}
 	return;
 }
@@ -904,9 +890,8 @@ void sigint_handler(int sig)
 	pid_t fg_pid = fgpid(jobs); // current foreground job
 	struct job_t * fg_job = getjobpid(jobs, fg_pid);
 
-	if(verbose)
-		printf("tsh: sigint_handler Entered by Job [%d] (%d)\n", fg_job->jid,
-				fg_pid);
+	if( verbose && fg_pid != 0 )
+		printf("tsh: sigint_handler Entered by PID %d\n", getpid());
 
 	if( fg_pid == 0 ) // No current jobs
 	{
@@ -918,8 +903,7 @@ void sigint_handler(int sig)
 	if( verbose )
 	{
 		printf("tsh: Job [%d] (%d) Terminated by Ctrl+C\n", fg_job->jid, fg_pid);	
-		printf("tsh: sigint_handler Exited by Job [%d] (%d)\n", fg_job->jid,
-				fg_pid);
+		printf("tsh: sigint_handler Exited by PID %d\n", getpid());
 	}
 }
 
@@ -936,9 +920,8 @@ void sigtstp_handler(int sig)
 	pid_t fg_pid = fgpid(jobs); // current foreground job
 	struct job_t * fg_job = getjobpid(jobs, fg_pid);
 
-	if(verbose)
-		printf("tsh: sigtstp_handler Entered by Job [%d] (%d)\n", fg_job->jid,
-				fg_pid);
+	if( verbose && fg_pid != 0 )
+		printf("tsh: sigtstp_handler Entered by PID %d\n", getpid());
 
 	if( fg_pid == 0 )
 	{
@@ -950,8 +933,7 @@ void sigtstp_handler(int sig)
 	if( verbose )
 	{
 		printf("tsh: Job [%d] (%d) Stopped by Ctrl+Z\n", fg_job->jid, fg_job->pid);
-		printf("tsh: sigtstp_handler Exited by Job [%d] (%d)\n", fg_job->jid,
-				fg_pid);
+		printf("tsh: sigtstp_handler Exited by PID %d\n", getpid());
 	}
 }
 

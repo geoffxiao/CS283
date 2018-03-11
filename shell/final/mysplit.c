@@ -31,6 +31,14 @@ int main(int argc, char **argv)
     exit(0);
    }
 
+  if (fork() == 0) 
+   {
+    /* child */
+    for (i=0; i < secs; i++)
+    sleep(1);
+    exit(0);
+   }
+
   /* parent waits for child to terminate */
   wait(NULL);
 
