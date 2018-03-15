@@ -4,6 +4,12 @@ void *thread(void *vargp);
 
 int main(int argc, char** argv)
 {
+	if(argc != 2)
+	{
+		fprintf(stderr, "Invalid Number of Arguments\n");
+		return 1;
+	}
+
 	int n = atoi(argv[1]); // number of threads to create
 
 	pthread_t tid[n]; // array of thread IDs
