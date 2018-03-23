@@ -1,0 +1,39 @@
+PROG=	test # variable definition
+OBJS=	one.o main.o two.o three.o # variable definition
+
+#CFLAGS=	-Wall -g 
+# this line is a comment
+
+all: ${PROG}
+# The above line is equivalent to:
+# 	 all: test
+
+${PROG}: ${OBJS}
+# The above line is equivalent to:
+# 	 test: one.o main.o two.o three.o
+
+	@echo $@ depends on $?
+# $@ is equal to ${PROG} which is 'test'
+# $? is equal to ${OBJS} which is 'one.o main.o two.o three.o'	
+# This line will print 'test depends on one.o main.o two.o three.o'
+
+	${CC} ${LDFLAGS} ${OBJS} -o ${PROG}
+# ${CC} is equal to 'cc'
+# ${LDFLAGS} has no value
+# The above line is equal to:
+# 	 cc one.o main.o two.o three.o -o test
+# This makes the executable file called test
+
+
+# Notice there is no .o target. In this case make uses the implicit rule for
+# the .o files. The built-in rule is: '$(CC) $(CPPFLAGS) $(CFLAGS) -c'
+# CPPFLAGS and CLFAGS have no set values
+# Therefore, the following is used to create the .o files:
+# 	 cc -c -o %.o %.c, where % is the filename
+
+
+clean: 
+# clean target
+
+	rm -f ls *.o 
+# remove all files with the .o extension

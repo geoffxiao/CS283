@@ -1,0 +1,198 @@
+-------------------------------------------------------------------------------
+v00.c
+-------------------------------------------------------------------------------
+
+First the program was compiled using 'cc -g v00.c -o v00.o'
+valgrind was run using: 'valgrind --leak-check=yes ./v00.o' 
+
+The results are:
+
+==18891== Memcheck, a memory error detector
+==18891== Copyright (C) 2002-2015, and GNU GPL'd, by Julian Seward et al.
+==18891== Using Valgrind-3.11.0 and LibVEX; rerun with -h for copyright info
+==18891== Command: ./v00.o
+==18891== 
+==18891== Invalid write of size 4
+==18891==    at 0x400544: f (v00.c:7)
+==18891==    by 0x40055A: main (v00.c:12)
+==18891==  Address 0x5204068 is 0 bytes after a block of size 40 alloc'd
+==18891==    at 0x4C2DB8F: malloc (in /usr/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
+==18891==    by 0x400537: f (v00.c:6)
+==18891==    by 0x40055A: main (v00.c:12)
+==18891== 
+==18891== 
+==18891== HEAP SUMMARY:
+==18891==     in use at exit: 40 bytes in 1 blocks
+==18891==   total heap usage: 1 allocs, 0 frees, 40 bytes allocated
+==18891== 
+==18891== 40 bytes in 1 blocks are definitely lost in loss record 1 of 1
+==18891==    at 0x4C2DB8F: malloc (in /usr/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
+==18891==    by 0x400537: f (v00.c:6)
+==18891==    by 0x40055A: main (v00.c:12)
+==18891== 
+==18891== LEAK SUMMARY:
+==18891==    definitely lost: 40 bytes in 1 blocks
+==18891==    indirectly lost: 0 bytes in 0 blocks
+==18891==      possibly lost: 0 bytes in 0 blocks
+==18891==    still reachable: 0 bytes in 0 blocks
+==18891==         suppressed: 0 bytes in 0 blocks
+==18891== 
+==18891== For counts of detected and suppressed errors, rerun with: -v
+==18891== ERROR SUMMARY: 2 errors from 2 contexts (suppressed: 0 from 0)
+
+
+There is an "Invaid write" error due to line 7. x is an array that can hold
+10 int. x[10] attempts to access the 11th (c arrays start from 0) element
+which has not been allocated. This leads to the "Invalid write" error.
+
+There is also a memory leak. x is allocated using malloc. The memory,
+however, is not freed.
+
+The corrected function f is:
+void f ()
+ {
+  int *x;
+  x = malloc(10 * sizeof(int));
+  x[9] = 0; /* changed from x[10] */
+  free(x); /* need to free the memory */
+ }
+
+
+The output from valgrind confirms that there are no memory leaks after the
+code is corrected: 
+
+==20128== Memcheck, a memory error detector
+==20128== Copyright (C) 2002-2015, and GNU GPL'd, by Julian Seward et al.
+==20128== Using Valgrind-3.11.0 and LibVEX; rerun with -h for copyright info
+==20128== Command: ./v00.o
+==20128== 
+==20128== 
+==20128== HEAP SUMMARY:
+==20128==     in use at exit: 0 bytes in 0 blocks
+==20128==   total heap usage: 1 allocs, 1 frees, 40 bytes allocated
+==20128== 
+==20128== All heap blocks were freed -- no leaks are possible
+==20128== 
+==20128== For counts of detected and suppressed errors, rerun with: -v
+==20128== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+
+
+
+-------------------------------------------------------------------------------
+v05.c
+-------------------------------------------------------------------------------
+
+The output of valgrind on the original v05 program is:
+
+==20144== Memcheck, a memory error detector
+==20144== Copyright (C) 2002-2015, and GNU GPL'd, by Julian Seward et al.
+==20144== Using Valgrind-3.11.0 and LibVEX; rerun with -h for copyright info
+==20144== Command: ./v05.o
+==20144== 
+==20144== Conditional jump or move depends on uninitialised value(s)
+==20144==    at 0x400532: main (v05.c:6)
+==20144== 
+==20144== 
+==20144== HEAP SUMMARY:
+==20144==     in use at exit: 0 bytes in 0 blocks
+==20144==   total heap usage: 1 allocs, 1 frees, 1,024 bytes allocated
+==20144== 
+==20144== All heap blocks were freed -- no leaks are possible
+==20144== 
+==20144== For counts of detected and suppressed errors, rerun with: -v
+==20144== Use --track-origins=yes to see where uninitialised values come from
+==20144== ERROR SUMMARY: 1 errors from 1 contexts (suppressed: 0 from 0)
+
+The error with the program is in line 6, where the variable x is used
+despite being uninitialized. This is very bad because such behavior is
+undefined. We don't know what the value of x will be, and this can even
+cause a program to crash.
+
+The program can be corrected by changing line 5 from 'int x;' to 'int x =
+0'. We simply need to initialize x to some value.
+
+The corrected code is:
+int main()
+ {
+  int x = 0; /* changed from 'int x' to 'int x = 0'. Need to initialize. */
+  if (x == 0)
+   {
+    printf("X is zero");
+   }
+  return 0;
+ }
+
+
+After correcting the error, valgrind shows that no other issues remain:
+
+==20182== Memcheck, a memory error detector
+==20182== Copyright (C) 2002-2015, and GNU GPL'd, by Julian Seward et al.
+==20182== Using Valgrind-3.11.0 and LibVEX; rerun with -h for copyright info
+==20182== Command: ./v05.o
+==20182== 
+==20182== 
+==20182== HEAP SUMMARY:
+==20182==     in use at exit: 0 bytes in 0 blocks
+==20182==   total heap usage: 1 allocs, 1 frees, 1,024 bytes allocated
+==20182== 
+==20182== All heap blocks were freed -- no leaks are possible
+==20182== 
+==20182== For counts of detected and suppressed errors, rerun with: -v
+==20182== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+
+
+
+-------------------------------------------------------------------------------
+v06.c
+-------------------------------------------------------------------------------
+
+The results of valgrind for the original program is:
+
+==35151== Memcheck, a memory error detector
+==35151== Copyright (C) 2002-2015, and GNU GPL'd, by Julian Seward et al.
+==35151== Using Valgrind-3.11.0 and LibVEX; rerun with -h for copyright info
+==35151== Command: ./v06.o
+==35151== 
+==35151== Conditional jump or move depends on uninitialised value(s)
+==35151==    at 0x400535: foo (v06.c:6)
+==35151==    by 0x40055A: main (v06.c:15)
+==35151== 
+==35151== 
+==35151== HEAP SUMMARY:
+==35151==     in use at exit: 0 bytes in 0 blocks
+==35151==   total heap usage: 1 allocs, 1 frees, 1,024 bytes allocated
+==35151== 
+==35151== All heap blocks were freed -- no leaks are possible
+==35151== 
+==35151== For counts of detected and suppressed errors, rerun with: -v
+==35151== Use --track-origins=yes to see where uninitialised values come from
+==35151== ERROR SUMMARY: 1 errors from 1 contexts (suppressed: 0 from 0)
+
+The error is the same as in v05. The variable y is used in line 15 as
+'foo(y)' without being initialized. This can be corrected by changing line
+14 from 'int y' to 'int y = 0' or some other value.
+
+The corrected main function is:
+int main()
+ {
+  int y = 0; /* changed from 'int y' to 'int y = 0'. Need to initialize. */
+  foo(y);
+ }
+
+
+valgrind confirms that no other errors exist after this correction:
+
+==35168== Memcheck, a memory error detector
+==35168== Copyright (C) 2002-2015, and GNU GPL'd, by Julian Seward et al.
+==35168== Using Valgrind-3.11.0 and LibVEX; rerun with -h for copyright info
+==35168== Command: ./v06.o
+==35168== 
+==35168== 
+==35168== HEAP SUMMARY:
+==35168==     in use at exit: 0 bytes in 0 blocks
+==35168==   total heap usage: 1 allocs, 1 frees, 1,024 bytes allocated
+==35168== 
+==35168== All heap blocks were freed -- no leaks are possible
+==35168== 
+==35168== For counts of detected and suppressed errors, rerun with: -v
+==35168== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)

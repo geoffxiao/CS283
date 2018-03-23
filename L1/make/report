@@ -1,0 +1,4 @@
+Changes made to the .h and .c files
+
+I changed the return value of main.c to 0 not 1. main should return a 0 for
+successful completion of the program.

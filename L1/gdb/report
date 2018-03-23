@@ -1,0 +1,141 @@
+Geoffrey Xiao, gx26
+CS283 Lab L1 gdb
+
+----------------------------------------------------------------------------
+etox.c
+----------------------------------------------------------------------------
+Compiled etox.c using 'cc -g -o etox.o etox.c'
+Used command 'gdb' to start debugger
+Used 'file etox.o' to load the etox.o program
+
+For any input of 'x' and 'n', the output 'e^x' is 'inf'.
+
+I identified the error by using breakpoints. 
+
+First I set a breakpoint at line 23 to see if the inputs were correctly
+obtained using scanf and if the outputs were correctly printed using printf. 
+'print x', 'print n', and 'print series' agreed with what was being inputted
+to the program through stdin and what was being outputted to the console
+through stdout. So printf/scanf was not the issue.
+
+Next, I set a breakpoint at line 33 to see if the getvalue function worked
+correctly. The line 'factorial(k)' gave 0. This made the line 
+'xpow / factorial(k)' a divide by zero error, giving inf.
+
+Upon inspection, the error was due to line 44 of etox.c in the factorial
+function. In this line 'fact = 0' instead of 'fact = 1'.
+
+The corrected factorial function is:
+int factorial (number)
+int number;
+ {
+  int j;
+  int fact = 0; /* fact = 1 instead of fact = 0 */
+
+  for (j = 1; j <= number; j++)
+   {
+    fact = fact * j;
+   }
+
+  return(fact);
+ }
+
+Once line 44 was changed, inputs of x = 2, n = 10 evaluated to 7.388, which is close
+to the exact value of 7.389 (e^2).
+
+
+-------------------------------------------------------------------------
+g1.c
+-------------------------------------------------------------------------
+After compiling using 'cc -g -o g1.o g1.c', I ran the program. I typed '1 2
+3' and pressed enter. The output was an unending stream of '1'.
+
+To debug, I first added a breakpoint to line 9 using 'break 9'. I then
+checked c using 'print c'. c was correctly set to the first character I
+inputted. I also checked 'print (isalnum(c))' which gave '8'.
+
+I then added a breakpoint to line 11 using 'break 11'. I noticd that line 11
+is never reached.
+
+The issue is that the while statement is not enclosed with brackets so the
+line 'c = fgetc( stdin )' is never executed.
+
+The corrected code is:
+
+int main ()
+ {
+  char c;
+  c = fgetc (stdin) ;
+  while (c != EOF)
+  { /* added bracket */
+  if (isalnum (c) )
+   printf ("%c\n", c) ;
+  c = fgetc (stdin) ;
+  } /* added bracket */
+  return(1);
+ }
+ 
+After this change, the program no longer runs in an infinite loop. The
+program ehchoes my input character by character.
+
+
+-----------------------------------------------------------------------
+g2.c
+-----------------------------------------------------------------------
+After compiling and running g2.o, I get a 'Segmentation fault'. Typically
+such errors are due to memory management errors.
+
+I load the core file using 'gdb g2.o core'
+
+The following is the result:
+
+#0  __GI__IO_getline_info (fp=fp@entry=0x7f5d8daaf8e0 <_IO_2_1_stdin_>,
+buf=buf@entry=0x0,
+    n=1022, delim=delim@entry=10, extract_delim=extract_delim@entry=1,
+eof=eof@entry=0x0)
+    at iogetline.c:77
+77      iogetline.c: No such file or directory.
+
+
+Using 'bt' to see the sequence of calls, I get:
+#0  __GI__IO_getline_info (fp=fp@entry=0x7f5d8daaf8e0 <_IO_2_1_stdin_>,
+buf=buf@entry=0x0,
+    n=1022, delim=delim@entry=10, extract_delim=extract_delim@entry=1,
+eof=eof@entry=0x0)
+    at iogetline.c:77
+#1  0x00007f5d8d759d78 in __GI__IO_getline (fp=fp@entry=0x7f5d8daaf8e0
+<_IO_2_1_stdin_>,
+    buf=buf@entry=0x0, n=<optimized out>, delim=delim@entry=10,
+    extract_delim=extract_delim@entry=1) at iogetline.c:34
+#2  0x00007f5d8d758b7d in _IO_fgets (buf=0x0, n=<optimized out>,
+    fp=0x7f5d8daaf8e0 <_IO_2_1_stdin_>) at iofgets.c:53
+#3  0x000000000040062e in main () at g2.c:10
+
+Stack call #3 'g2.c:10' indicates line 10 of g2.c is the culprit.
+g2.c:10 is 'fgets (buf, 1024, stdin) ;'
+
+Stack call #1 and #2 also indicate that buf=0x0, buf is a pointer but has
+been assigned a null value. When g2 tries to run line 10, the null pointer
+causes the segmentation fault error.
+
+'num = 1 << 31' evaluates to -2147483648
+When we try to pass this negative number to malloc we get a null pointer
+(0x0).
+
+Therefore, we have to change the code to the following:
+
+int main ()
+ {
+  char * buf;
+  int num;
+  num = 1024; /* change from 1 << 31 to 1024 to avoid null pointer */
+  buf = malloc(num) ;
+  fgets (buf, 1024, stdin) ;
+  printf ("%s\n", buf) ;
+  return(1);
+ }
+
+buf is now 'malloc(1024)'. 1024 was chosen to agree with the fgets command.
+The second argument in fgets indicates the maximum size string to read.
+
+After these changes, the g2 program runs correctly: it echoes my input.

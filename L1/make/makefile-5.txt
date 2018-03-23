@@ -1,0 +1,35 @@
+PROG=	test # variable definition
+OBJS=	one.o main.o two.o three.o # variable definition
+#CFLAGS=	-Wall -g # This line is a comment
+
+all: ${PROG}
+# The above line is equivalent to:
+# all: test
+
+${PROG}: ${OBJS}
+# The above line is equivalent to:
+# test: one.o main.o two.o three.o
+
+	@echo $@ depends on $?
+# $@ is equal to 'test' (the filename target)
+# $? is equal to 'one.o main.o two.o three.o' (the dependencies)
+# The above line will echo 'test depends on one.o main.o two.o three.o'	
+
+	${CC} ${LDFLAGS} ${OBJS} -o ${PROG}
+# The above line is equivalent to:
+# cc one.o main.o two.o three.o -o test
+
+%.o: %.c ext.h one.h
+# This is a pattern rule. % matches with a filename, so one.o, main.o,
+# two.o, and three.o depend on their .c files and ext.h and one.h
+
+	$(CC) -c $(CFLAGS) -o $@ $<
+# $@ evaluates to the filename target (the .o file)
+# $< is the first dependency (the .c file)
+# The above line is equal to
+#   cc -c -o %.o %.c
+
+clean: # clean target
+	rm -f ${PROG} ${OBJS}
+# the above line is equal to:
+#   rm -f test one.o main.o two.o three.o

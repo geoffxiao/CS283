@@ -1,0 +1,48 @@
+PROG=	test # variable PROG has the value 'test'
+OBJS=	one.o main.o two.o three.o # variable OBJS has the value 'one.c main.o two.o three.o'
+CFLAGS=	-Wall -g # variable CFLAGS has the value '-Wall -g'
+
+all: ${PROG}
+# the above line is equivalent to:
+# 	 all: test
+
+${PROG}: ${OBJS}
+# the above line is equivalent to:
+# 	 test: one.o main.o two.o three.o
+
+
+	@echo $@ depends on $?
+# Typically all the lines executed by make will be echoed, the @
+# suppresses the echoing
+# $@ is the target filename which is 'test' 
+# $? is the name of all dependencies newer than the target
+# If test has not been made, $? expands to 'one.o main.o two.o three.o'		
+
+	${CC} ${LDFLAGS} ${OBJS} -o ${PROG}
+# CC is a predefined variable whose default value is 'cc'
+# LDFLAGS is a predefined variable whose default value is the empty string
+# PROG is a variable whose value is 'test'
+# The above line is equivalent to:
+# 	cc one.o main.o two.o three.o -o test
+
+.c.o:
+# The above line is an implicit rule and is equivalent to:
+# 	 %.o : %.c
+# This means that the '%.o file depends on the '%.c' file, where % stands
+# for the filename before the extension
+
+
+	$(CC) -c $(CFLAGS) -o $@ $<
+# $@ is the target filename which is '%.o'
+# $< is the first dependency which is '%.c'
+# The above line is equivalent to:
+#   cc -c -Wall -g -o %.o %.c
+# -Wall enabls all warnings when compiling
+# -g creates a debugging version of the executable
+
+clean: # the clean target
+
+
+	rm -f ${PROG} ${OBJS}
+# The above lins is equivalent to:
+#   rm -f test one.o main.o two.o three.o

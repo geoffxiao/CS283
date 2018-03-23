@@ -1,0 +1,41 @@
+# Run 'make', then 'touch one.h' and 'make' again.
+
+CC=cc # cc is the C compiler, CC is a variable with the value 'cc'
+
+all: one # all is a target which depends on the file one
+
+one: one.o main.o two.o three.o 
+# one is a filename target which depends on the files one.o, main.o, two.o, and three.o
+# If the dependencies are newer than the target file, the dependency targets are run
+
+
+	${CC} one.o main.o two.o three.o -o one 
+# ${CC} substitutes the value of the CC variable which is cc, cc takes 
+# the object files and builds an executable file called one 
+# (the -o option specifies the output filename)
+
+one.o: ext.h one.h one.c # one.o depends on ext.h, one.h, and one.c
+
+	${CC} -c one.c 
+# the -c option tells the C compiler to compile the code and create an object 
+# file called one.o
+
+main.o: ext.h one.h main.c 
+# main.o is a filename target which depends on ext.h, one.h, and main.c
+
+	${CC} -c main.c # compile main.c into main.o
+
+two.o: one.h two.c
+# two.o is a filename target which depends on one.h and two.c
+
+	${CC} -c two.c # compile two.c into two.o
+
+three.o: one.h three.c
+# three.o is a filename target which depends on one.h and three.c
+
+	${CC} -c three.c
+# compile three.c into three.o
+
+clean: # clean is a target and can be run using "make clean"
+
+	rm -f one *.o # force removal of the file one and all .o (object) files
